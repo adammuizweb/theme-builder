@@ -42,7 +42,7 @@ class ThemeWorkspace
     public static function baseDir(): string
     {
         $dir = dirname(__DIR__, 3) . '/cfg/var/theme-builder';
-        if (!is_dir($dir)) @mkdir($dir, 0755, true);
+        if (!is_dir($dir)) { @mkdir($dir, 0775, true); @chmod($dir, 0775); }
         return $dir;
     }
 
@@ -121,7 +121,7 @@ class ThemeWorkspace
         if (is_dir($dir)) return ['error' => 'Theme already exists.'];
 
         $dirs = ['', 'main', 'main/list', 'main/single', 'main/index', 'assets', 'assets/css', 'assets/js'];
-        foreach ($dirs as $d) @mkdir($dir . '/' . $d, 0755, true);
+        foreach ($dirs as $d) { @mkdir($dir . '/' . $d, 0775, true); }
 
         $starterDir = dirname(__DIR__) . '/templates/starter';
         self::copyDir($starterDir, $dir);
@@ -159,7 +159,7 @@ class ThemeWorkspace
         if (!$file) return false;
         $path = self::themeDir($slug) . '/' . $file;
         $dir = dirname($path);
-        if (!is_dir($dir)) @mkdir($dir, 0755, true);
+        if (!is_dir($dir)) { @mkdir($dir, 0775, true); }
         return file_put_contents($path, $content) !== false;
     }
 
@@ -180,7 +180,7 @@ class ThemeWorkspace
         $path = ltrim($path, '/');
         $full = self::themeDir($slug) . '/' . $path;
         $dir = dirname($full);
-        if (!is_dir($dir)) @mkdir($dir, 0755, true);
+        if (!is_dir($dir)) { @mkdir($dir, 0775, true); }
         return file_put_contents($full, $content) !== false;
     }
 
@@ -229,12 +229,12 @@ class ThemeWorkspace
 
     private static function copyDir(string $src, string $dst): void
     {
-        if (!is_dir($dst)) @mkdir($dst, 0755, true);
+        if (!is_dir($dst)) { @mkdir($dst, 0775, true); }
         $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($src, RecursiveDirectoryIterator::SKIP_DOTS), RecursiveIteratorIterator::SELF_FIRST);
         foreach ($it as $item) {
             $target = $dst . '/' . $it->getSubPathName();
-            if ($item->isDir()) { if (!is_dir($target)) @mkdir($target, 0755, true); }
-            else { $td = dirname($target); if (!is_dir($td)) @mkdir($td, 0755, true); copy($item->getRealPath(), $target); }
+            if ($item->isDir()) { if (!is_dir($target)) { @mkdir($target, 0775, true); } }
+            else { $td = dirname($target); if (!is_dir($td)) { @mkdir($td, 0775, true); } copy($item->getRealPath(), $target); }
         }
     }
 
