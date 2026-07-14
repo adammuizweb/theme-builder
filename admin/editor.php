@@ -168,7 +168,7 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
   document.getElementById('tb-btn-save').addEventListener('click', function() {
     var btn = this; btn.disabled = true; btn.textContent = '<?= __('Saving...') ?>';
     var fd = new FormData(); fd.append('theme', slug); fd.append('slot', currentSlot); fd.append('content', editor.getValue());
-    fetch(base + '/?page=admin/tools/theme-builder/api/save_file', { method: 'POST', body: fd })
+    fetch(base + '/?action=api&page=admin/tools/theme-builder/api/save_file', { method: 'POST', body: fd })
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.success) { btn.textContent = '<?= __('Saved!') ?>'; setTimeout(function() { btn.textContent = '<?= __('Save') ?>'; btn.disabled = false; }, 1500); }
@@ -179,7 +179,7 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
   var previewPanel = document.getElementById('tb-preview-panel');
   var previewFrame = document.getElementById('tb-preview-frame');
   function loadPreview(slot, full) {
-    previewFrame.src = base + '/?page=admin/tools/theme-builder/api/preview&theme=' + encodeURIComponent(slug) + '&slot=' + encodeURIComponent(slot || currentSlot) + (full ? '&full=1' : '');
+    previewFrame.src = base + '/?action=api&page=admin/tools/theme-builder/api/preview&theme=' + encodeURIComponent(slug) + '&slot=' + encodeURIComponent(slot || currentSlot) + (full ? '&full=1' : '');
     previewPanel.style.display = 'flex';
   }
   document.getElementById('tb-btn-preview').addEventListener('click', function() { loadPreview(currentSlot, false); });
@@ -201,7 +201,7 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
       styles: document.getElementById('tb-m-styles').value.split('\n').filter(function(s) { return s.trim(); }),
       scripts: document.getElementById('tb-m-scripts').value.split('\n').filter(function(s) { return s.trim(); })
     }));
-    fetch(base + '/?page=admin/tools/theme-builder/api/save_manifest', { method: 'POST', body: fd })
+    fetch(base + '/?action=api&page=admin/tools/theme-builder/api/save_manifest', { method: 'POST', body: fd })
     .then(function(r) { return r.json(); })
     .then(function(data) { if (data.success) { manifestModal.style.display = 'none'; window.location.reload(); } else { alert(data.error || 'Failed.'); } });
   });
@@ -211,7 +211,7 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
   document.getElementById('tb-btn-assets').addEventListener('click', function() { assetModal.style.display = 'flex'; loadAsset(currentAsset); });
   function loadAsset(path) {
     currentAsset = path;
-    fetch(base + '/?page=admin/tools/theme-builder/api/preview&theme=' + encodeURIComponent(slug) + '&asset=' + encodeURIComponent(path))
+    fetch(base + '/?action=api&page=admin/tools/theme-builder/api/preview&theme=' + encodeURIComponent(slug) + '&asset=' + encodeURIComponent(path))
     .then(function(r) { return r.text(); })
     .then(function(content) {
       if (assetEditor) assetEditor.toTextArea();
@@ -229,7 +229,7 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
   document.getElementById('tb-asset-save').addEventListener('click', function() {
     if (!assetEditor) return;
     var fd = new FormData(); fd.append('theme', slug); fd.append('slot', '_asset'); fd.append('asset_path', currentAsset); fd.append('content', assetEditor.getValue());
-    fetch(base + '/?page=admin/tools/theme-builder/api/save_file', { method: 'POST', body: fd })
+    fetch(base + '/?action=api&page=admin/tools/theme-builder/api/save_file', { method: 'POST', body: fd })
     .then(function(r) { return r.json(); })
     .then(function(data) { if (data.success) { alert('<?= __('Asset saved!') ?>'); } else { alert(data.error || 'Failed.'); } });
   });

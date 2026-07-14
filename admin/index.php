@@ -36,7 +36,7 @@ $themes = ThemeWorkspace::listThemes();
       <div class="tb-form-row">
         <div class="tb-field">
           <label for="tb-slug"><?= __('Slug') ?> *</label>
-          <input type="text" id="tb-slug" name="slug" required pattern="[a-zA-Z0-9_-]+" placeholder="my-theme" maxlength="50">
+          <input type="text" id="tb-slug" name="slug" required pattern="[a-zA-Z0-9_\-]+" placeholder="my-theme" maxlength="50">
           <small><?= __('Folder name — lowercase, no spaces') ?></small>
         </div>
         <div class="tb-field">
@@ -106,7 +106,7 @@ $themes = ThemeWorkspace::listThemes();
     e.preventDefault();
     var btn = this.querySelector('button[type="submit"]');
     btn.disabled = true; btn.textContent = '<?= __('Creating...') ?>';
-    fetch(base + '/?page=admin/tools/theme-builder/api/create_theme', { method: 'POST', body: new FormData(this) })
+    fetch(base + '/?action=api&page=admin/tools/theme-builder/api/create_theme', { method: 'POST', body: new FormData(this) })
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.success) { window.location.href = editorUrl + '&theme=' + data.slug; }
@@ -118,7 +118,7 @@ $themes = ThemeWorkspace::listThemes();
   document.querySelectorAll('.tb-btn-build').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var slug = this.dataset.slug; this.disabled = true; this.textContent = '<?= __('Building...') ?>'; var self = this;
-      fetch(base + '/?page=admin/tools/theme-builder/api/build_zip&theme=' + encodeURIComponent(slug))
+      fetch(base + '/?action=api&page=admin/tools/theme-builder/api/build_zip&theme=' + encodeURIComponent(slug))
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.success) { var a = document.createElement('a'); a.href = data.download_url; a.download = slug + '.zip'; a.click(); }
@@ -134,7 +134,7 @@ $themes = ThemeWorkspace::listThemes();
       var slug = this.dataset.slug;
       if (!confirm('<?= __('Install theme to themes directory?') ?>')) return;
       this.disabled = true; var self = this;
-      fetch(base + '/?page=admin/tools/theme-builder/api/install_theme&theme=' + encodeURIComponent(slug))
+      fetch(base + '/?action=api&page=admin/tools/theme-builder/api/install_theme&theme=' + encodeURIComponent(slug))
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.success) { alert('<?= __('Theme installed! Go to Themes to activate it.') ?>'); }
@@ -150,7 +150,7 @@ $themes = ThemeWorkspace::listThemes();
       var slug = this.dataset.slug;
       if (!confirm('<?= __('Delete this draft theme? This cannot be undone.') ?>')) return;
       this.disabled = true; var self = this;
-      fetch(base + '/?page=admin/tools/theme-builder/api/delete_theme&theme=' + encodeURIComponent(slug))
+      fetch(base + '/?action=api&page=admin/tools/theme-builder/api/delete_theme&theme=' + encodeURIComponent(slug))
       .then(function(r) { return r.json(); })
       .then(function(data) { if (data.success) { window.location.reload(); } else { alert(data.error || 'Delete failed.'); self.disabled = false; } })
       .catch(function(err) { alert('Error: ' + err.message); self.disabled = false; });
