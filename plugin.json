@@ -1,0 +1,101 @@
+{
+  "name": "theme-builder",
+  "version": "1.0.0",
+  "title": "Theme Builder",
+  "description": "Visual theme builder — create themes with HTML/CSS/JS, edit slot templates with variable reference, live preview, build installable ZIP.",
+  "author": "Adam Muiz",
+  "author_uri": "https://jyavani.com/member/adammuiz/",
+  "plugin_uri": "https://jyavani.com/plugin/theme-builder/",
+  "homepage": "https://jyavani.com/plugin/theme-builder/",
+  "icon": "icon.png",
+  "requires": {
+    "php": ">=8.1",
+    "extensions": ["pdo", "json", "zip"]
+  },
+  "admin": {
+    "pages": [
+      {
+        "route": "admin/tools/theme-builder",
+        "file": "admin/index.php",
+        "title": "Theme Builder",
+        "roles": ["admin"]
+      },
+      {
+        "route": "admin/tools/theme-builder/editor",
+        "file": "admin/editor.php",
+        "title": "Theme Editor",
+        "hidden": true,
+        "roles": ["admin"]
+      },
+      {
+        "route": "admin/tools/theme-builder/api/save_file",
+        "file": "admin/api/save_file.php",
+        "hidden": true,
+        "roles": ["admin"]
+      },
+      {
+        "route": "admin/tools/theme-builder/api/create_theme",
+        "file": "admin/api/create_theme.php",
+        "hidden": true,
+        "roles": ["admin"]
+      },
+      {
+        "route": "admin/tools/theme-builder/api/delete_theme",
+        "file": "admin/api/delete_theme.php",
+        "hidden": true,
+        "roles": ["admin"]
+      },
+      {
+        "route": "admin/tools/theme-builder/api/build_zip",
+        "file": "admin/api/build_zip.php",
+        "hidden": true,
+        "roles": ["admin"]
+      },
+      {
+        "route": "admin/tools/theme-builder/api/preview",
+        "file": "admin/api/preview.php",
+        "hidden": true,
+        "roles": ["admin"]
+      },
+      {
+        "route": "admin/tools/theme-builder/api/save_manifest",
+        "file": "admin/api/save_manifest.php",
+        "hidden": true,
+        "roles": ["admin"]
+      },
+      {
+        "route": "admin/tools/theme-builder/api/install_theme",
+        "file": "admin/api/install_theme.php",
+        "hidden": true,
+        "roles": ["admin"]
+      },
+      {
+        "route": "admin/tools/theme-builder/api/download_zip",
+        "file": "admin/api/download_zip.php",
+        "hidden": true,
+        "roles": ["admin"]
+      }
+    ],
+    "nav": [
+      {
+        "label": "Theme Builder",
+        "icon": "palette",
+        "page": "admin/tools/theme-builder",
+        "parent": "tools",
+        "roles": ["admin"]
+      }
+    ]
+  },
+  "static": {
+    "copy": [
+      {
+        "from": "assets/css/builder.css",
+        "to": "static/css/theme-builder.css"
+      }
+    ]
+  },
+  "assets": {
+    "css": ["/static/css/theme-builder.css"],
+    "js": []
+  }
+}
