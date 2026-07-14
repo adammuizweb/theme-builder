@@ -1,6 +1,6 @@
 {
   "name": "theme-builder",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "title": "Theme Builder",
   "description": "Visual theme builder — create themes with HTML/CSS/JS, edit slot templates with variable reference, live preview, build installable ZIP.",
   "author": "Adam Muiz",
