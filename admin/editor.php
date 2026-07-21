@@ -99,6 +99,9 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
       </div>
       <?= VarReference::renderPanel($currentSlot) ?>
     </div>
+
+    <button class="tb-restore-btn tb-restore-slots" id="tb-restore-slots" title="<?= __('Show Slots') ?>">&raquo;</button>
+    <button class="tb-restore-btn tb-restore-vars" id="tb-restore-vars" title="<?= __('Show Variables') ?>">&laquo;</button>
   </div>
 
   <div id="tb-preview-panel" class="tb-preview-panel" style="display:none">
@@ -110,7 +113,11 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
             <option value="<?= h($sk) ?>" <?= $sk === $currentSlot ? 'selected' : '' ?>><?= h($sl) ?></option>
           <?php endforeach; ?>
         </select>
-        <button id="tb-preview-full" class="btn btn-sm btn-outline"><?= __('Full Page') ?></button>
+        <div class="tb-viewport-btns">
+          <button class="tb-viewport-btn active" data-vp="desktop" title="Desktop (100%)">&#x25A1;</button>
+          <button class="tb-viewport-btn" data-vp="tablet" title="Tablet (768px)">&#x25AD;</button>
+          <button class="tb-viewport-btn" data-vp="mobile" title="Mobile (375px)">&#x25B7;</button>
+        </div>
         <button id="tb-preview-close" class="btn btn-sm btn-outline">&times;</button>
       </div>
     </div>
@@ -199,9 +206,17 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
     previewPanel.style.display = 'flex';
   }
   document.getElementById('tb-btn-preview').addEventListener('click', function() { loadPreview(currentSlot, false); });
-  document.getElementById('tb-preview-full').addEventListener('click', function() { loadPreview(document.getElementById('tb-preview-slot').value, true); });
   document.getElementById('tb-preview-close').addEventListener('click', function() { previewPanel.style.display = 'none'; });
   document.getElementById('tb-preview-slot').addEventListener('change', function() { loadPreview(this.value, false); });
+
+  // Viewport switcher
+  document.querySelectorAll('.tb-viewport-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.tb-viewport-btn').forEach(function(b) { b.classList.remove('active'); });
+      this.classList.add('active');
+      previewFrame.className = 'tb-preview-frame vt-' + this.dataset.vp;
+    });
+  });
 
   var manifestModal = document.getElementById('tb-manifest-modal');
   document.getElementById('tb-btn-manifest').addEventListener('click', function() { manifestModal.style.display = 'flex'; });
@@ -263,24 +278,55 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
     mainEl.classList.toggle('slots-collapsed');
     this.innerHTML = mainEl.classList.contains('slots-collapsed') ? '&raquo;' : '&laquo;';
     this.title = mainEl.classList.contains('slots-collapsed') ? '<?= __('Expand') ?>' : '<?= __('Collapse') ?>';
+    syncRestoreVisibility();
     setTimeout(function() { editor.refresh(); }, 250);
   });
   document.getElementById('tb-toggle-vars').addEventListener('click', function() {
     mainEl.classList.toggle('vars-collapsed');
     this.innerHTML = mainEl.classList.contains('vars-collapsed') ? '&laquo;' : '&raquo;';
     this.title = mainEl.classList.contains('vars-collapsed') ? '<?= __('Expand') ?>' : '<?= __('Collapse') ?>';
+    syncRestoreVisibility();
     setTimeout(function() { editor.refresh(); }, 250);
   });
 
-  // Code editor maximize/minimize
-  var codeEl = document.querySelector('.tb-editor-code');
+  // Code editor maximize/minimize — collapses both side panels
+  var isMaximized = false;
   var editorBtn = document.getElementById('tb-toggle-editor');
   editorBtn.addEventListener('click', function() {
-    var maximized = codeEl.classList.toggle('maximized');
-    editorBtn.innerHTML = maximized ? '&#x2716;' : '&#x26F6;';
-    editorBtn.title = maximized ? '<?= __('Restore') ?>' : '<?= __('Maximize') ?>';
+    isMaximized = !isMaximized;
+    mainEl.classList.toggle('slots-collapsed', isMaximized);
+    mainEl.classList.toggle('vars-collapsed', isMaximized);
+    editorBtn.innerHTML = isMaximized ? '&#x2716;' : '&#x26F6;';
+    editorBtn.title = isMaximized ? '<?= __('Restore') ?>' : '<?= __('Maximize') ?>';
+    syncRestoreVisibility();
     setTimeout(function() { editor.refresh(); }, 250);
   });
+
+  // Restore buttons for collapsed panels
+  document.getElementById('tb-restore-slots').addEventListener('click', function() {
+    mainEl.classList.remove('slots-collapsed');
+    document.getElementById('tb-toggle-slots').innerHTML = '&laquo;';
+    document.getElementById('tb-toggle-slots').title = '<?= __('Collapse') ?>';
+    syncRestoreVisibility();
+    isMaximized = false;
+    editorBtn.innerHTML = '&#x26F6;';
+    editorBtn.title = '<?= __('Maximize') ?>';
+    setTimeout(function() { editor.refresh(); }, 250);
+  });
+  document.getElementById('tb-restore-vars').addEventListener('click', function() {
+    mainEl.classList.remove('vars-collapsed');
+    document.getElementById('tb-toggle-vars').innerHTML = '&raquo;';
+    document.getElementById('tb-toggle-vars').title = '<?= __('Collapse') ?>';
+    syncRestoreVisibility();
+    isMaximized = false;
+    editorBtn.innerHTML = '&#x26F6;';
+    editorBtn.title = '<?= __('Maximize') ?>';
+    setTimeout(function() { editor.refresh(); }, 250);
+  });
+  function syncRestoreVisibility() {
+    if (!mainEl.classList.contains('slots-collapsed')) document.getElementById('tb-restore-slots').style.display = '';
+    if (!mainEl.classList.contains('vars-collapsed')) document.getElementById('tb-restore-vars').style.display = '';
+  }
 
   // Sync CodeMirror theme with CMS dark mode
   function syncCMTheme() {
