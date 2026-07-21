@@ -37,7 +37,6 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
 <script src="/static/vendor/codemirror/mode/javascript/javascript.min.js"></script>
 <script src="/static/vendor/codemirror/mode/htmlmixed/htmlmixed.min.js"></script>
 <script src="/static/vendor/codemirror/mode/css/css.min.js"></script>
-<script src="/static/vendor/codemirror/mode/php/php.min.js"></script>
 <script src="/static/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
 <script src="/static/vendor/codemirror/addon/edit/closetag.min.js"></script>
 <script src="/static/vendor/codemirror/addon/selection/active-line.min.js"></script>
