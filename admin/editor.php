@@ -32,6 +32,7 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
 ?>
 
 <link rel="stylesheet" href="/static/vendor/codemirror/codemirror.min.css">
+<link rel="stylesheet" href="/static/vendor/codemirror/addon/fold/foldgutter.css">
 <script src="/static/vendor/codemirror/codemirror.min.js"></script>
 <script src="/static/vendor/codemirror/mode/xml/xml.min.js"></script>
 <script src="/static/vendor/codemirror/mode/javascript/javascript.min.js"></script>
@@ -40,6 +41,11 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
 <script src="/static/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
 <script src="/static/vendor/codemirror/addon/edit/closetag.min.js"></script>
 <script src="/static/vendor/codemirror/addon/selection/active-line.min.js"></script>
+<script src="/static/vendor/codemirror/addon/fold/foldcode.min.js"></script>
+<script src="/static/vendor/codemirror/addon/fold/foldgutter.min.js"></script>
+<script src="/static/vendor/codemirror/addon/fold/brace-fold.min.js"></script>
+<script src="/static/vendor/codemirror/addon/fold/xml-fold.min.js"></script>
+<script src="/static/vendor/codemirror/addon/fold/comment-fold.min.js"></script>
 
 <div class="tb-editor">
   <div class="tb-editor-topbar">
@@ -56,7 +62,10 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
   <div class="tb-editor-main">
     <div class="tb-editor-sidebar">
       <div class="tb-sidebar-section">
-        <h4><?= __('Slots') ?></h4>
+        <div class="tb-sidebar-header">
+          <h4><?= __('Slots') ?></h4>
+          <button class="tb-collapse-btn" id="tb-toggle-slots" title="<?= __('Collapse') ?>">&laquo;</button>
+        </div>
         <ul class="tb-slot-list">
           <?php foreach ($slotLabels as $slotKey => $label):
             $info = $completion[$slotKey] ?? [];
@@ -74,13 +83,19 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
     <div class="tb-editor-code">
       <div class="tb-code-header">
         <span class="tb-code-file"><?= h($currentFile) ?></span>
-        <span class="tb-code-slot"><?= h($slotLabels[$currentSlot] ?? $currentSlot) ?></span>
+        <div style="display:flex;align-items:center;gap:.5rem;">
+          <span class="tb-code-slot"><?= h($slotLabels[$currentSlot] ?? $currentSlot) ?></span>
+          <button class="tb-collapse-btn" id="tb-toggle-editor" title="<?= __('Maximize') ?>">&#x26F6;</button>
+        </div>
       </div>
       <textarea id="tb-code-editor"><?= h($currentContent) ?></textarea>
     </div>
 
     <div class="tb-editor-ref">
-      <h4><?= __('Variables') ?></h4>
+      <div class="tb-ref-header">
+        <h4><?= __('Variables') ?></h4>
+        <button class="tb-collapse-btn" id="tb-toggle-vars" title="<?= __('Collapse') ?>">&raquo;</button>
+      </div>
       <?= VarReference::renderPanel($currentSlot) ?>
     </div>
   </div>
@@ -160,7 +175,8 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
   var editor = CodeMirror.fromTextArea(document.getElementById('tb-code-editor'), {
     mode: 'htmlmixed', lineNumbers: true, autoCloseBrackets: true,
     autoCloseTags: true, styleActiveLine: true, indentUnit: 2, tabSize: 2,
-    lineWrapping: true, viewportMargin: Infinity
+    lineWrapping: true, viewportMargin: Infinity,
+    foldGutter: true, gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"]
   });
   editor.setSize('100%', 'calc(100vh - 240px)');
 
@@ -238,6 +254,31 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
   });
   document.addEventListener('keydown', function(e) {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); document.getElementById('tb-btn-save').click(); }
+  });
+
+  // Panel collapse toggles
+  var mainEl = document.querySelector('.tb-editor-main');
+  document.getElementById('tb-toggle-slots').addEventListener('click', function() {
+    mainEl.classList.toggle('slots-collapsed');
+    this.innerHTML = mainEl.classList.contains('slots-collapsed') ? '&raquo;' : '&laquo;';
+    this.title = mainEl.classList.contains('slots-collapsed') ? '<?= __('Expand') ?>' : '<?= __('Collapse') ?>';
+    setTimeout(function() { editor.refresh(); }, 250);
+  });
+  document.getElementById('tb-toggle-vars').addEventListener('click', function() {
+    mainEl.classList.toggle('vars-collapsed');
+    this.innerHTML = mainEl.classList.contains('vars-collapsed') ? '&laquo;' : '&raquo;';
+    this.title = mainEl.classList.contains('vars-collapsed') ? '<?= __('Expand') ?>' : '<?= __('Collapse') ?>';
+    setTimeout(function() { editor.refresh(); }, 250);
+  });
+
+  // Code editor maximize/minimize
+  var codeEl = document.querySelector('.tb-editor-code');
+  var editorBtn = document.getElementById('tb-toggle-editor');
+  editorBtn.addEventListener('click', function() {
+    var maximized = codeEl.classList.toggle('maximized');
+    editorBtn.innerHTML = maximized ? '&#x2716;' : '&#x26F6;';
+    editorBtn.title = maximized ? '<?= __('Restore') ?>' : '<?= __('Maximize') ?>';
+    setTimeout(function() { editor.refresh(); }, 250);
   });
 })();
 </script>
