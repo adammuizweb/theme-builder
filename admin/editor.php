@@ -159,7 +159,7 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
   var currentAsset = 'assets/css/style.css';
 
   var editor = CodeMirror.fromTextArea(document.getElementById('tb-code-editor'), {
-    mode: 'application/x-httpd-php', lineNumbers: true, autoCloseBrackets: true,
+    mode: 'htmlmixed', lineNumbers: true, autoCloseBrackets: true,
     autoCloseTags: true, styleActiveLine: true, indentUnit: 2, tabSize: 2,
     lineWrapping: true, viewportMargin: Infinity
   });
