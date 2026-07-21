@@ -39,6 +39,8 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
 <script src="/static/vendor/codemirror/mode/javascript/javascript.min.js"></script>
 <script src="/static/vendor/codemirror/mode/htmlmixed/htmlmixed.min.js"></script>
 <script src="/static/vendor/codemirror/mode/css/css.min.js"></script>
+<script src="/static/vendor/codemirror/mode/clike/clike.min.js"></script>
+<script src="/static/vendor/codemirror/mode/php/php.min.js"></script>
 <script src="/static/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
 <script src="/static/vendor/codemirror/addon/edit/closetag.min.js"></script>
 <script src="/static/vendor/codemirror/addon/selection/active-line.min.js"></script>
@@ -181,7 +183,7 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
   var currentAsset = 'assets/css/style.css';
 
   var editor = CodeMirror.fromTextArea(document.getElementById('tb-code-editor'), {
-    mode: 'htmlmixed', lineNumbers: true, autoCloseBrackets: true,
+    mode: 'application/x-httpd-php', lineNumbers: true, autoCloseBrackets: true,
     autoCloseTags: true, styleActiveLine: true, indentUnit: 2, tabSize: 2,
     lineWrapping: true, viewportMargin: Infinity,
     foldGutter: true, gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"]
