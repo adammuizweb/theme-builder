@@ -92,6 +92,7 @@ html.theme-dark .tb-code-header,
 html:not(.theme-light):not(.theme-dark) .tb-code-header { background:var(--adam-surface-3,#16202e); border-color:var(--adam-border,#1f2a35); }
 html.theme-dark .tb-editor-code .CodeMirror,
 html:not(.theme-light):not(.theme-dark) .tb-editor-code .CodeMirror { border-color:var(--adam-border,#1f2a35); }
+/* CodeMirror dark mode handled by JS — toggles cm-s-dracula / cm-s-light */
 html.theme-dark .tb-collapse-btn,
 html:not(.theme-light):not(.theme-dark) .tb-collapse-btn { color:var(--adam-muted,#9ca3af); }
 html.theme-dark .tb-collapse-btn:hover,

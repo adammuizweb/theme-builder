@@ -32,6 +32,7 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
 ?>
 
 <link rel="stylesheet" href="/static/vendor/codemirror/codemirror.min.css">
+<link rel="stylesheet" href="/static/vendor/codemirror/theme/dracula.min.css">
 <link rel="stylesheet" href="/static/vendor/codemirror/addon/fold/foldgutter.css">
 <script src="/static/vendor/codemirror/codemirror.min.js"></script>
 <script src="/static/vendor/codemirror/mode/xml/xml.min.js"></script>
@@ -41,11 +42,11 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
 <script src="/static/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
 <script src="/static/vendor/codemirror/addon/edit/closetag.min.js"></script>
 <script src="/static/vendor/codemirror/addon/selection/active-line.min.js"></script>
-<script src="/static/vendor/codemirror/addon/fold/foldcode.min.js"></script>
-<script src="/static/vendor/codemirror/addon/fold/foldgutter.min.js"></script>
-<script src="/static/vendor/codemirror/addon/fold/brace-fold.min.js"></script>
-<script src="/static/vendor/codemirror/addon/fold/xml-fold.min.js"></script>
-<script src="/static/vendor/codemirror/addon/fold/comment-fold.min.js"></script>
+<script src="/static/vendor/codemirror/addon/fold/foldcode.js"></script>
+<script src="/static/vendor/codemirror/addon/fold/foldgutter.js"></script>
+<script src="/static/vendor/codemirror/addon/fold/brace-fold.js"></script>
+<script src="/static/vendor/codemirror/addon/fold/xml-fold.js"></script>
+<script src="/static/vendor/codemirror/addon/fold/comment-fold.js"></script>
 
 <div class="tb-editor">
   <div class="tb-editor-topbar">
@@ -280,5 +281,21 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
     editorBtn.title = maximized ? '<?= __('Restore') ?>' : '<?= __('Maximize') ?>';
     setTimeout(function() { editor.refresh(); }, 250);
   });
+
+  // Sync CodeMirror theme with CMS dark mode
+  function syncCMTheme() {
+    var isDark = document.documentElement.classList.contains('theme-dark') ||
+      (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches && !document.documentElement.classList.contains('theme-light'));
+    var wrap = editor.getWrapperElement();
+    if (isDark) {
+      wrap.classList.remove('cm-s-light');
+      wrap.classList.add('cm-s-dracula');
+    } else {
+      wrap.classList.remove('cm-s-dracula');
+      wrap.classList.add('cm-s-light');
+    }
+  }
+  syncCMTheme();
+  new MutationObserver(syncCMTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 })();
 </script>
