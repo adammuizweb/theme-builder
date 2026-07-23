@@ -28,6 +28,13 @@
         "roles": ["admin"]
       },
       {
+        "route": "admin/tools/theme-builder/preview",
+        "file": "admin/preview.php",
+        "title": "Live Preview",
+        "hidden": true,
+        "roles": ["admin"]
+      },
+      {
         "route": "admin/tools/theme-builder/api/save_file",
         "file": "admin/api/save_file.php",
         "hidden": true,

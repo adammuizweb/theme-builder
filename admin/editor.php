@@ -57,6 +57,7 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
     <div class="tb-editor-actions">
       <button id="tb-btn-save" class="btn btn-sm btn-primary"><?= __('Save') ?></button>
       <button id="tb-btn-preview" class="btn btn-sm btn-outline"><?= __('Preview') ?></button>
+      <a href="<?= h($base . '/?page=admin/tools/theme-builder/preview&theme=' . urlencode($slug)) ?>" class="btn btn-sm btn-outline btn-live-preview"><?= __('Live Preview') ?></a>
       <button id="tb-btn-manifest" class="btn btn-sm btn-outline"><?= __('theme.json') ?></button>
       <button id="tb-btn-assets" class="btn btn-sm btn-outline"><?= __('CSS/JS') ?></button>
     </div>
