@@ -1,5 +1,12 @@
 <?php
 declare(strict_types=1);
+adiwira_require_site_owner($pdo, false);
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+    header('Allow: GET');
+    http_response_code(405);
+    echo 'GET required.';
+    return;
+}
 $slug = trim((string)($_GET['theme'] ?? ''));
 if ($slug === '') { echo '<p>Theme required.</p>'; return; }
 $themeDir = ThemeWorkspace::themeDir($slug);

@@ -9,8 +9,9 @@
   "homepage": "https://jyavani.com/plugin/theme-builder/",
   "icon": "icon.png",
   "requires": {
+    "jyavani": ">=2.3.72",
     "php": ">=8.1",
-    "extensions": ["pdo", "json", "zip"]
+    "extensions": ["pdo", "json", "zip", "mbstring"]
   },
   "admin": {
     "pages": [
@@ -18,6 +19,7 @@
         "route": "admin/tools/theme-builder",
         "file": "admin/index.php",
         "title": "Theme Builder",
+        "site_owner": true,
         "roles": ["admin"]
       },
       {
@@ -25,61 +27,63 @@
         "file": "admin/editor.php",
         "title": "Theme Editor",
         "hidden": true,
-        "roles": ["admin"]
-      },
-      {
-        "route": "admin/tools/theme-builder/preview",
-        "file": "admin/preview.php",
-        "title": "Live Preview",
-        "hidden": true,
+        "site_owner": true,
         "roles": ["admin"]
       },
       {
         "route": "admin/tools/theme-builder/api/save_file",
         "file": "admin/api/save_file.php",
         "hidden": true,
+        "site_owner": true,
         "roles": ["admin"]
       },
       {
         "route": "admin/tools/theme-builder/api/create_theme",
         "file": "admin/api/create_theme.php",
         "hidden": true,
+        "site_owner": true,
         "roles": ["admin"]
       },
       {
         "route": "admin/tools/theme-builder/api/delete_theme",
         "file": "admin/api/delete_theme.php",
         "hidden": true,
+        "site_owner": true,
         "roles": ["admin"]
       },
       {
         "route": "admin/tools/theme-builder/api/build_zip",
         "file": "admin/api/build_zip.php",
         "hidden": true,
+        "site_owner": true,
         "roles": ["admin"]
       },
       {
         "route": "admin/tools/theme-builder/api/preview",
         "file": "admin/api/preview.php",
         "hidden": true,
+        "site_owner": true,
         "roles": ["admin"]
       },
       {
         "route": "admin/tools/theme-builder/api/save_manifest",
         "file": "admin/api/save_manifest.php",
         "hidden": true,
+        "site_owner": true,
         "roles": ["admin"]
       },
       {
         "route": "admin/tools/theme-builder/api/install_theme",
         "file": "admin/api/install_theme.php",
         "hidden": true,
+        "site_owner": true,
         "roles": ["admin"]
       },
       {
         "route": "admin/tools/theme-builder/api/download_zip",
         "file": "admin/api/download_zip.php",
         "hidden": true,
+        "site_owner": true,
         "roles": ["admin"]
       }
     ],
@@ -89,6 +93,7 @@
         "icon": "palette",
         "page": "admin/tools/theme-builder",
         "parent": "tools",
+        "site_owner": true,
         "roles": ["admin"]
       }
     ]
@@ -97,12 +102,12 @@
     "copy": [
       {
         "from": "assets/css/builder.css",
-        "to": "static/css/theme-builder.css"
+        "to": "static/plugins/theme-builder/theme-builder.css"
       }
     ]
   },
   "assets": {
-    "css": ["/static/css/theme-builder.css"],
+    "css": ["/static/plugins/theme-builder/theme-builder.css"],
     "js": []
   }
 }

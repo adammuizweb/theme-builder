@@ -1,6 +1,9 @@
 <?php
 declare(strict_types=1);
-header('Content-Type: application/json');
-$slug = trim((string)($_GET['theme'] ?? $_POST['theme'] ?? ''));
-if ($slug === '') { echo json_encode(['error' => 'Theme required.']); return; }
-echo json_encode(['success' => ThemeWorkspace::deleteTheme($slug)]);
+adiwira_require_site_owner($pdo, true);
+if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') adiwira_json(['error' => __('Method not allowed')], 405);
+$csrf = $_POST['csrf_token'] ?? '';
+if (!is_string($csrf) || !adiwira_csrf_validate($csrf)) adiwira_json(['error' => __('CSRF invalid')], 419);
+$slug = trim((string)($_POST['theme'] ?? ''));
+if ($slug === '') adiwira_json(['error' => 'Theme required.'], 400);
+adiwira_json(['success' => ThemeWorkspace::deleteTheme($slug)]);

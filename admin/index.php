@@ -9,6 +9,8 @@ if (!function_exists('h')) {
 
 $pdo = $GLOBALS['pdo'] ?? null;
 if (!$pdo) { echo '<p>Database not available.</p>'; return; }
+adiwira_require_site_owner($pdo, false);
+$csrfToken = csrf_token();
 
 $base = defined('ADMIN_BASE_PATH') ? ADMIN_BASE_PATH : '/adiwira';
 $selfUrl = $base . '/?page=admin/tools/theme-builder';
@@ -33,6 +35,7 @@ $themes = ThemeWorkspace::listThemes();
   <div class="tb-create">
     <h3><?= __('Create New Theme') ?></h3>
     <form id="tb-create-form" class="tb-form">
+      <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
       <div class="tb-form-row">
         <div class="tb-field">
           <label for="tb-slug"><?= __('Slug') ?> *</label>
@@ -101,6 +104,7 @@ $themes = ThemeWorkspace::listThemes();
 (function() {
   var base = <?= json_encode($base) ?>;
   var editorUrl = <?= json_encode($editorUrl) ?>;
+  var csrfToken = <?= json_encode($csrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
   document.getElementById('tb-create-form').addEventListener('submit', function(e) {
     e.preventDefault();
@@ -118,7 +122,8 @@ $themes = ThemeWorkspace::listThemes();
   document.querySelectorAll('.tb-btn-build').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var slug = this.dataset.slug; this.disabled = true; this.textContent = '<?= __('Building...') ?>'; var self = this;
-      fetch(base + '/?action=api&page=admin/tools/theme-builder/api/build_zip&theme=' + encodeURIComponent(slug))
+      var fd = new FormData(); fd.append('theme', slug); fd.append('csrf_token', csrfToken);
+      fetch(base + '/?action=api&page=admin/tools/theme-builder/api/build_zip', { method: 'POST', body: fd })
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.success) { var a = document.createElement('a'); a.href = data.download_url; a.download = slug + '.zip'; a.click(); }
@@ -134,7 +139,8 @@ $themes = ThemeWorkspace::listThemes();
       var slug = this.dataset.slug;
       if (!confirm('<?= __('Install theme to themes directory?') ?>')) return;
       this.disabled = true; var self = this;
-      fetch(base + '/?action=api&page=admin/tools/theme-builder/api/install_theme&theme=' + encodeURIComponent(slug))
+      var fd = new FormData(); fd.append('theme', slug); fd.append('csrf_token', csrfToken);
+      fetch(base + '/?action=api&page=admin/tools/theme-builder/api/install_theme', { method: 'POST', body: fd })
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.success) { alert('<?= __('Theme installed! Go to Themes to activate it.') ?>'); }
@@ -150,7 +156,8 @@ $themes = ThemeWorkspace::listThemes();
       var slug = this.dataset.slug;
       if (!confirm('<?= __('Delete this draft theme? This cannot be undone.') ?>')) return;
       this.disabled = true; var self = this;
-      fetch(base + '/?action=api&page=admin/tools/theme-builder/api/delete_theme&theme=' + encodeURIComponent(slug))
+      var fd = new FormData(); fd.append('theme', slug); fd.append('csrf_token', csrfToken);
+      fetch(base + '/?action=api&page=admin/tools/theme-builder/api/delete_theme', { method: 'POST', body: fd })
       .then(function(r) { return r.json(); })
       .then(function(data) { if (data.success) { window.location.reload(); } else { alert(data.error || 'Delete failed.'); self.disabled = false; } })
       .catch(function(err) { alert('Error: ' + err.message); self.disabled = false; });

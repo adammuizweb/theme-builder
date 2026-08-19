@@ -9,6 +9,8 @@ if (!function_exists('h')) {
 
 $pdo = $GLOBALS['pdo'] ?? null;
 if (!$pdo) { echo '<p>Database not available.</p>'; return; }
+adiwira_require_site_owner($pdo, false);
+$csrfToken = csrf_token();
 
 $base = defined('ADMIN_BASE_PATH') ? ADMIN_BASE_PATH : '/adiwira';
 $dashUrl = $base . '/?page=admin/tools/theme-builder';
@@ -39,8 +41,6 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
 <script src="/static/vendor/codemirror/mode/javascript/javascript.min.js"></script>
 <script src="/static/vendor/codemirror/mode/htmlmixed/htmlmixed.min.js"></script>
 <script src="/static/vendor/codemirror/mode/css/css.min.js"></script>
-<script src="/static/vendor/codemirror/mode/clike/clike.min.js"></script>
-<script src="/static/vendor/codemirror/mode/php/php.min.js"></script>
 <script src="/static/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
 <script src="/static/vendor/codemirror/addon/edit/closetag.min.js"></script>
 <script src="/static/vendor/codemirror/addon/selection/active-line.min.js"></script>
@@ -57,7 +57,6 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
     <div class="tb-editor-actions">
       <button id="tb-btn-save" class="btn btn-sm btn-primary"><?= __('Save') ?></button>
       <button id="tb-btn-preview" class="btn btn-sm btn-outline"><?= __('Preview') ?></button>
-      <a href="<?= h($base . '/?page=admin/tools/theme-builder/preview&theme=' . urlencode($slug)) ?>" class="btn btn-sm btn-outline btn-live-preview"><?= __('Live Preview') ?></a>
       <button id="tb-btn-manifest" class="btn btn-sm btn-outline"><?= __('theme.json') ?></button>
       <button id="tb-btn-assets" class="btn btn-sm btn-outline"><?= __('CSS/JS') ?></button>
     </div>
@@ -181,10 +180,11 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
   var base = <?= json_encode($base) ?>;
   var slug = <?= json_encode($slug) ?>;
   var currentSlot = <?= json_encode($currentSlot) ?>;
+  var csrfToken = <?= json_encode($csrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
   var currentAsset = 'assets/css/style.css';
 
   var editor = CodeMirror.fromTextArea(document.getElementById('tb-code-editor'), {
-    mode: 'application/x-httpd-php', lineNumbers: true, autoCloseBrackets: true,
+    mode: 'htmlmixed', lineNumbers: true, autoCloseBrackets: true,
     autoCloseTags: true, styleActiveLine: true, indentUnit: 2, tabSize: 2,
     lineWrapping: true, viewportMargin: Infinity,
     foldGutter: true, gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"]
@@ -193,7 +193,7 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
 
   document.getElementById('tb-btn-save').addEventListener('click', function() {
     var btn = this; btn.disabled = true; btn.textContent = '<?= __('Saving...') ?>';
-    var fd = new FormData(); fd.append('theme', slug); fd.append('slot', currentSlot); fd.append('content', editor.getValue());
+    var fd = new FormData(); fd.append('theme', slug); fd.append('slot', currentSlot); fd.append('content', editor.getValue()); fd.append('csrf_token', csrfToken);
     fetch(base + '/?action=api&page=admin/tools/theme-builder/api/save_file', { method: 'POST', body: fd })
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -224,7 +224,7 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
   var manifestModal = document.getElementById('tb-manifest-modal');
   document.getElementById('tb-btn-manifest').addEventListener('click', function() { manifestModal.style.display = 'flex'; });
   document.getElementById('tb-manifest-save').addEventListener('click', function() {
-    var fd = new FormData(); fd.append('theme', slug);
+    var fd = new FormData(); fd.append('theme', slug); fd.append('csrf_token', csrfToken);
     fd.append('manifest', JSON.stringify({
       folder: slug, name: document.getElementById('tb-m-name').value,
       description: document.getElementById('tb-m-description').value,
@@ -262,7 +262,7 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
   });
   document.getElementById('tb-asset-save').addEventListener('click', function() {
     if (!assetEditor) return;
-    var fd = new FormData(); fd.append('theme', slug); fd.append('slot', '_asset'); fd.append('asset_path', currentAsset); fd.append('content', assetEditor.getValue());
+    var fd = new FormData(); fd.append('theme', slug); fd.append('slot', '_asset'); fd.append('asset_path', currentAsset); fd.append('content', assetEditor.getValue()); fd.append('csrf_token', csrfToken);
     fetch(base + '/?action=api&page=admin/tools/theme-builder/api/save_file', { method: 'POST', body: fd })
     .then(function(r) { return r.json(); })
     .then(function(data) { if (data.success) { alert('<?= __('Asset saved!') ?>'); } else { alert(data.error || 'Failed.'); } });
