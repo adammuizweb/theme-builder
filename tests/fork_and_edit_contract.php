@@ -10,6 +10,30 @@ define('VIEWS_BASE', $themesRoot);
 define('DEFAULT_THEME_FOLDER', 'default');
 define('THEME_BUILDER_WORKSPACE', $workspace);
 
+function theme_operation_acquire(array $folders): array
+{
+    $folders = array_values(array_unique($folders));
+    sort($folders, SORT_STRING);
+    foreach ($folders as $folder) {
+        if (!is_string($folder) || strlen($folder) > 128
+            || preg_match('/\A[A-Za-z0-9_-][A-Za-z0-9._-]*\z/D', $folder) !== 1 || in_array($folder, ['.', '..'], true)) {
+            throw new InvalidArgumentException('Invalid standalone Core lock folder.');
+        }
+    }
+    $GLOBALS['_theme_core_lock_events'][] = ['acquire', $folders];
+    return $folders;
+}
+
+function theme_operation_release(array $locks): void
+{
+    $GLOBALS['_theme_core_lock_events'][] = ['release', $locks];
+}
+
+function package_publication_recovery_paths(string $target): array
+{
+    return $GLOBALS['_theme_publication_recovery_paths'][$target] ?? [];
+}
+
 final class ForkContractPdo extends PDO
 {
     public bool $failNextCommit = false;
@@ -105,7 +129,7 @@ JSON;
     $pdo = new ForkContractPdo('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
     $pdo->exec('CREATE TABLE themes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        folder_name TEXT NOT NULL UNIQUE,
+        folder_name TEXT COLLATE NOCASE NOT NULL UNIQUE,
         name TEXT NOT NULL,
         description TEXT NOT NULL DEFAULT \'\',
         version TEXT NOT NULL DEFAULT \'\',
@@ -130,6 +154,22 @@ JSON;
     }
 
     $service = new ThemeForkService($pdo);
+    $wrongCaseFork = $service->fork('SOURCE', 'wrong-case-fork', 'Wrong Case', 'Wrong Case', 7);
+    $check(($wrongCaseFork['success'] ?? true) === false && !file_exists($themesRoot . '/wrong-case-fork'),
+        'fork source lookup requires exact case even with case-insensitive database collation');
+    $residualTarget = $themesRoot . '/residual-fork';
+    $residualPath = $themesRoot . '/.package-publication-recovery-residual-fork-contract-old';
+    mkdir($residualPath, 0770);
+    file_put_contents($residualPath . '/preserved.marker', 'recovery');
+    $GLOBALS['_theme_publication_recovery_paths'][$residualTarget] = [$residualPath];
+    $residualFork = $service->fork('source', 'residual-fork', 'Residual Fork', 'Residual Fork', 7);
+    unset($GLOBALS['_theme_publication_recovery_paths'][$residualTarget]);
+    $check(($residualFork['success'] ?? true) === false
+        && str_contains((string)($residualFork['error'] ?? ''), 'Inspect and restore or archive')
+        && !file_exists($residualTarget) && is_file($residualPath . '/preserved.marker')
+        && glob($themesRoot . '/.theme-builder-fork-residual-fork-*') === [],
+        'fresh managed-fork publication rejects and preserves Core recovery residuals before private staging or registration');
+    $remove($residualPath);
     $fork = $service->fork('source', 'source-fork', 'Source Fork Runtime', 'Source Fork Title', 7);
     $check(($fork['success'] ?? false) === true && ($fork['folder'] ?? null) === 'source-fork', 'registered source is forked to a new exact target');
     $forkRoot = $themesRoot . '/source-fork';
@@ -193,6 +233,11 @@ JSON;
     $revisionMeta = json_decode((string)file_get_contents($revision . '/revision.json'), true, 32, JSON_THROW_ON_ERROR);
     $check(($revisionMeta['relative_path'] ?? null) === 'main/sections/hero.php' && ($revisionMeta['actor_user_id'] ?? null) === 7
         && ($revisionMeta['change_note'] ?? null) === 'Contract edit', 'revision metadata records source identity and actor');
+    unset($revisionMeta['root_identity'], $revisionMeta['operation'], $revisionMeta['restored_from_revision_id']);
+    file_put_contents($revision . '/revision.json', json_encode($revisionMeta, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL);
+    $legacyRevisions = $service->revisions('source-fork', $leafId);
+    $check(count($legacyRevisions) === 1 && ($legacyRevisions[0]['operation'] ?? '') === 'save',
+        'concrete legacy managed-fork revision without root or operation remains valid as save');
 
     $headerId = (string)$files['header.php']['id'];
     $headerBefore = $inspector->source('source-fork', $headerId);
@@ -248,6 +293,11 @@ JSON;
     $insert->execute(['precise-number', 'Precise', '1.0.0', 0, '', '']);
     $precise = $service->fork('precise-number', 'precise-number-fork', 'Precise Fork', 'Precise Fork', 7);
     $check(($precise['success'] ?? true) === false && !file_exists($themesRoot . '/precise-number-fork'), 'manifest decimals too precise for lossless decoding fail before publication');
+    $events = $GLOBALS['_theme_core_lock_events'] ?? [];
+    $check(($events[0] ?? null) === ['acquire', ['0-theme-lifecycle', 'SOURCE', 'wrong-case-fork']]
+        && in_array(['acquire', ['0-theme-lifecycle', 'residual-fork', 'source']], $events, true)
+        && in_array(['acquire', ['0-theme-lifecycle', 'source', 'source-fork']], $events, true)
+        && ($events[count($events) - 1][0] ?? '') === 'release', 'fork publication acquires sorted Core folders and releases the Core lock last');
 } catch (Throwable $error) {
     $failures[] = 'unexpected exception: ' . $error->getMessage();
     echo 'FAIL unexpected exception: ' . $error->getMessage() . PHP_EOL;

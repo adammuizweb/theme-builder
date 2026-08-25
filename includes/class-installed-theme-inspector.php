@@ -56,8 +56,12 @@ final class InstalledThemeInspector
     {
         if (!preg_match('/\A[a-f0-9]{64}\z/D', $fileId)) return null;
 
-        $this->registeredTheme($folder);
+        $row = $this->registeredTheme($folder);
         $root = $this->themeRoot($folder);
+        $rootStat = @lstat($root);
+        if (!is_array($rootStat) || (($rootStat['mode'] & 0170000) !== 0040000)) {
+            throw new RuntimeException('Theme root identity is unavailable.');
+        }
         $files = $this->inventory($root, $folder);
         $byPath = [];
 
@@ -81,6 +85,16 @@ final class InstalledThemeInspector
             $file['mode'] = $state['mode'];
             $file['owner'] = $state['owner'];
             $file['group'] = $state['group'];
+            $file['target_token'] = hash('sha256', implode("\0", [
+                'theme-builder-target-v1',
+                (string)($row['id'] ?? 0),
+                $folder,
+                (string)$rootStat['dev'],
+                (string)$rootStat['ino'],
+                (string)$file['path'],
+                (string)$state['dev'],
+                (string)$state['ino'],
+            ]));
             $file['utf8'] = preg_match('//u', $state['content']) === 1;
             $file['source'] = $state['content'];
             return $file;
@@ -96,7 +110,10 @@ final class InstalledThemeInspector
         $stmt->execute([$folder]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if (!$row) throw new RuntimeException('Theme is not registered.');
+        if (!$row || !is_string($row['folder_name'] ?? null)
+            || !hash_equals($folder, $row['folder_name'])) {
+            throw new RuntimeException('Theme is not registered with this exact folder identity.');
+        }
         return $row;
     }
 
@@ -121,7 +138,8 @@ final class InstalledThemeInspector
 
     private function assertFolder(string $folder): void
     {
-        if (!preg_match('/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}\z/D', $folder)) {
+        if (strlen($folder) > 128 || preg_match('/\A[A-Za-z0-9_-][A-Za-z0-9._-]*\z/D', $folder) !== 1
+            || in_array($folder, ['.', '..'], true)) {
             throw new InvalidArgumentException('Invalid theme folder.');
         }
     }
@@ -232,6 +250,8 @@ final class InstalledThemeInspector
             'mode' => sprintf('%04o', $after['mode'] & 07777),
             'owner' => $this->ownerName((int)$after['uid']),
             'group' => $this->groupName((int)$after['gid']),
+            'dev' => (int)$after['dev'],
+            'ino' => (int)$after['ino'],
         ];
     }
 
@@ -404,14 +424,27 @@ final class InstalledThemeInspector
                 try {
                     $state = $this->readRegularFile($manifestPath, $root, 1048576);
                     $decoded = json_decode($state['content'], true);
-                    if (is_array($decoded)) $manifest = $decoded;
+                    if (is_array($decoded)) {
+                        if (array_key_exists('folder', $decoded)
+                            && (!is_string($decoded['folder']) || !hash_equals((string)$row['folder_name'], $decoded['folder']))) {
+                            throw new RuntimeException('Theme manifest folder identity is invalid.');
+                        }
+                        $decoded['folder'] = (string)$row['folder_name'];
+                        $manifest = $decoded;
+                    }
                 } catch (Throwable $e) {
+                    if (str_contains($e->getMessage(), 'folder identity')) throw $e;
                     // Database metadata remains available when a manifest is unreadable.
                 }
             }
         }
 
-        $storeUrl = (string)($manifest['store']['url'] ?? $row['store_url'] ?? '');
+        $manifestStoreUrl = is_string($manifest['store']['url'] ?? null) ? trim($manifest['store']['url']) : '';
+        $manifestStoreSlug = is_string($manifest['store']['slug'] ?? null) ? trim($manifest['store']['slug']) : '';
+        $databaseStoreUrl = trim((string)($row['store_url'] ?? ''));
+        $databaseStoreSlug = trim((string)($row['store_slug'] ?? ''));
+        $storeUrl = $manifestStoreUrl !== '' ? $manifestStoreUrl : $databaseStoreUrl;
+        $storeSlug = $manifestStoreSlug !== '' ? $manifestStoreSlug : $databaseStoreSlug;
         return [
             'id' => (int)($row['id'] ?? 0),
             'folder' => (string)($row['folder_name'] ?? ''),
@@ -421,8 +454,9 @@ final class InstalledThemeInspector
             'author' => (string)($manifest['author'] ?? $row['author'] ?? ''),
             'active' => !empty($row['is_active']),
             'system' => !empty($row['is_system']),
-            'store' => $storeUrl !== '',
+            'store' => $storeUrl !== '' || $storeSlug !== '',
             'store_url' => $storeUrl,
+            'store_slug' => $storeSlug,
             'php_files' => $phpFiles,
             'inspectable' => $error === null,
             'error' => $error,

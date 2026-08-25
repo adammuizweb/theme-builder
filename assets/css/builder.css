@@ -22,7 +22,8 @@
 .tb-badge-both { background:#dbeafe; color:#1e40af; } .tb-badge-light { background:#fef9c3; color:#854d0e; } .tb-badge-dark { background:#1e293b; color:#e2e8f0; }
 .tb-files { font-size:.75rem; color:var(--adam-muted,#64748b); } .tb-status { font-size:.75rem; font-weight:600; }
 .tb-complete { color:#166534; } .tb-incomplete { color:#b45309; }
-.tb-theme-actions { display:flex; gap:.35rem; }
+.tb-theme-actions { display:flex; gap:.35rem; flex-wrap:wrap; }
+.tb-export-form { display:inline-flex; margin:0; }
 .btn { display:inline-block; padding:.4rem .8rem; border-radius:8px; font-size:.85rem; font-weight:600; cursor:pointer; border:1px solid transparent; text-decoration:none; text-align:center; }
 .btn-primary { background:var(--adam-accent,#00A89E); color:#fff; border-color:var(--adam-accent,#00A89E); }
 .tb-dashboard .btn-primary,.tb-editor .btn-primary,.tb-installed .btn-primary { background:var(--adam-primary-gradient,var(--adam-accent,#00A89E)); color:#fff; border-color:transparent; box-shadow:0 5px 14px rgba(185,28,28,.16); transition:background .15s ease,box-shadow .15s ease,transform .15s ease; }
@@ -138,6 +139,15 @@
 .tb-inspector-badge.is-system { background:#e0e7ff; color:#3730a3; }
 .tb-inspector-badge.is-store { background:#fef3c7; color:#92400e; }
 .tb-inspector-badge.is-fork { background:#ede9fe; color:#5b21b6; }
+.tb-inspector-badge.is-dirty { background:#ffedd5; color:#9a3412; }
+.tb-inspector-badge.is-clean { background:#dcfce7; color:#166534; }
+.tb-inspector-badge.is-upstream { background:#fee2e2; color:#991b1b; }
+.tb-risk-check { display:block; margin:.8rem 0; line-height:1.45; }
+.tb-risk-check input { margin-right:.4rem; }
+.tb-revision-list { list-style:none; margin:0; padding:0; display:grid; gap:.5rem; }
+.tb-revision-list li { display:grid; grid-template-columns:1fr auto; gap:.15rem .5rem; align-items:center; padding:.55rem; border:1px solid var(--adam-border,#e2e8f0); border-radius:6px; }
+.tb-revision-list small { grid-column:1; color:var(--adam-text-muted,#64748b); }
+.tb-revision-list .btn { grid-column:2; grid-row:1 / span 2; }
 .tb-inspector-error { color:#b91c1c; font-size:.75rem; }
 .tb-theme-card-error { border-color:#fecaca; }
 .tb-inspector-empty { padding:2rem; border:1px dashed var(--adam-border,#e2e8f0); border-radius:10px; color:var(--adam-muted,#64748b); text-align:center; }
@@ -229,15 +239,17 @@ html:not(.theme-light):not(.theme-dark) .CodeMirror-foldgutter-folded:after { co
   .tb-slot-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media(max-width:900px){
-  .tb-editor-main { grid-template-columns:0px 1fr 0px; }
-  .slots-collapsed .tb-editor-sidebar,.vars-collapsed .tb-editor-ref { }
-  .tb-editor-sidebar { border-right:none; padding-right:0; }
-  .tb-editor-ref { border-left:none; padding-left:0; }
-}
-@media(max-width:900px){
   .tb-editor-main { display:flex; flex-direction:column; }
-  .tb-editor-sidebar,.tb-editor-ref { display:none; }
-  .tb-editor-code { flex:1; }
+  .tb-editor-main .tb-editor-sidebar,.tb-editor-main .tb-editor-ref { display:block; width:auto; opacity:1; padding:0; pointer-events:auto; overflow:auto; border:0; }
+  .tb-editor-main .tb-editor-sidebar,.tb-editor-main .tb-editor-code,.tb-editor-main .tb-editor-ref { flex:0 0 auto; border-bottom:1px solid var(--adam-border,#e2e8f0); }
+  .tb-editor-main:not([data-mobile-panel="slots"]) #tb-slots-content,
+  .tb-editor-main:not([data-mobile-panel="code"]) #tb-code-content,
+  .tb-editor-main:not([data-mobile-panel="vars"]) #tb-vars-content { display:none; }
+  .tb-editor-main[data-mobile-panel="code"] .tb-editor-code { flex:1 1 auto; min-height:0; }
+  .tb-editor-main[data-mobile-panel="slots"] .tb-editor-sidebar,
+  .tb-editor-main[data-mobile-panel="vars"] .tb-editor-ref { max-height:50vh; }
+  .tb-editor-sidebar .tb-sidebar-header,.tb-editor-ref .tb-ref-header,.tb-code-header { min-height:42px; padding:.5rem; margin:0; }
+  .tb-restore-btn { display:none !important; }
   .tb-editor-topbar { flex-wrap:wrap; }
   .tb-editor-actions { flex-wrap:wrap; }
 }
@@ -245,8 +257,7 @@ html:not(.theme-light):not(.theme-dark) .CodeMirror-foldgutter-folded:after { co
 @media(max-width:600px){
   .tb-editor { height:auto; min-height:100vh; }
   .tb-editor-main { display:flex; flex-direction:column; min-height:0; }
-  .tb-editor-sidebar,.tb-editor-ref { display:none; }
-  .tb-editor-code { flex:1; min-height:60vh; }
+  .tb-editor-main[data-mobile-panel="code"] .tb-editor-code { flex:1; min-height:60vh; }
   .tb-editor-topbar { gap:.5rem; padding:.35rem 0; }
   .tb-editor-topbar h3 { font-size:.9rem; }
   .tb-editor-actions { gap:.25rem; }

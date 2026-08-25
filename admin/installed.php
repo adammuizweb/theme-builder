@@ -17,8 +17,30 @@ $selfUrl = $base . '/?page=admin/tools/theme-builder/installed';
 $inspector = new InstalledThemeInspector($pdo);
 $forkService = new ThemeForkService($pdo);
 $csrfToken = csrf_token();
-$folder = trim((string)($_GET['theme'] ?? ''));
-$renderForkModal = static function () use ($base, $selfUrl, $csrfToken): void {
+$folder = is_string($_GET['theme'] ?? null) ? $_GET['theme'] : '';
+$forkRequest = '';
+$forkCandidate = $_GET['fork'] ?? null;
+if (is_string($forkCandidate) && strlen($forkCandidate) <= 128
+    && preg_match('/\A[A-Za-z0-9_-][A-Za-z0-9._-]*\z/D', $forkCandidate) === 1
+    && !in_array($forkCandidate, ['.', '..'], true)) {
+    try {
+        $inspector->inspect($forkCandidate);
+        $forkRequest = $forkCandidate;
+    } catch (Throwable) {
+        // Invalid, unregistered, or unsafe GET targets never open the fork workflow.
+    }
+}
+$exportUrl = $base . '/?action=api&page=admin/tools/theme-builder/api/export_theme_source';
+$renderExportForm = static function (string $themeFolder, string $label = 'Export PHP Source') use ($exportUrl, $csrfToken): void {
+?>
+<form method="post" action="<?= h($exportUrl) ?>" class="tb-export-form">
+  <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+  <input type="hidden" name="theme" value="<?= h($themeFolder) ?>">
+  <button type="submit" class="btn btn-sm btn-outline"><?= h(__($label)) ?></button>
+</form>
+<?php
+};
+$renderForkModal = static function () use ($base, $selfUrl, $csrfToken, $forkRequest): void {
 ?>
 <div id="tb-fork-modal" class="tb-modal" style="display:none">
   <div class="tb-modal-content">
@@ -77,6 +99,13 @@ $renderForkModal = static function () use ($base, $selfUrl, $csrfToken): void {
   document.querySelectorAll('[data-tb-fork-close]').forEach(function(button) {
     button.addEventListener('click', function() { modal.style.display = 'none'; });
   });
+  var requestedFork = <?= json_encode($forkRequest, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+  if (requestedFork) {
+    var requestedButton = Array.from(document.querySelectorAll('[data-tb-fork]')).find(function(button) {
+      return (button.dataset.source || '') === requestedFork;
+    });
+    if (requestedButton) requestedButton.click();
+  }
   form.addEventListener('submit', function(event) {
     event.preventDefault();
     submit.disabled = true;
@@ -123,6 +152,7 @@ if ($folder === ''):
   <?php else: ?>
     <div class="tb-theme-grid">
       <?php foreach ($themes as $theme): ?>
+        <?php $dirty = $theme['inspectable'] ? $forkService->dirtyState((string)$theme['folder']) : ['tracked' => false]; ?>
         <article class="tb-theme-card <?= !$theme['inspectable'] ? 'tb-theme-card-error' : '' ?>">
           <div class="tb-theme-card-header">
             <h4><?= h($theme['name']) ?></h4>
@@ -133,12 +163,26 @@ if ($folder === ''):
             <?php if ($theme['active']): ?><span class="tb-inspector-badge is-active"><?= __('Active') ?></span><?php endif; ?>
             <?php if ($theme['system']): ?><span class="tb-inspector-badge is-system"><?= __('System') ?></span><?php endif; ?>
             <?php if ($theme['store']): ?><span class="tb-inspector-badge is-store"><?= __('Store') ?></span><?php endif; ?>
+            <?php if ($theme['system'] || $theme['folder'] === (defined('DEFAULT_THEME_FOLDER') ? (string)DEFAULT_THEME_FOLDER : 'default')): ?>
+              <span class="tb-inspector-badge is-system"><?= __('Source Read-only') ?></span>
+            <?php elseif (isset($dirty['error'])): ?>
+              <span class="tb-inspector-badge is-upstream"><?= __('PHP Source Error') ?></span>
+            <?php elseif (!empty($dirty['upstream_changed'])): ?>
+              <span class="tb-inspector-badge is-upstream"><?= __('Upstream PHP Changed') ?> · <?= (int)$dirty['changed_count'] ?></span>
+            <?php elseif (!empty($dirty['locally_modified'])): ?>
+              <span class="tb-inspector-badge is-dirty"><?= __('Locally Modified PHP') ?> · <?= (int)$dirty['changed_count'] ?></span>
+            <?php elseif (!empty($dirty['tracked'])): ?>
+              <span class="tb-inspector-badge is-clean"><?= __('PHP Source Clean') ?></span>
+            <?php else: ?>
+              <span class="tb-inspector-badge"><?= __('PHP Source Not Tracked') ?> · <?= (int)($dirty['counts']['untracked'] ?? $theme['php_files']) ?></span>
+            <?php endif; ?>
             <span class="tb-files"><?= (int)$theme['php_files'] ?> <?= __('PHP files') ?></span>
           </div>
           <?php if ($theme['inspectable']): ?>
             <div class="tb-theme-actions">
               <a class="btn btn-sm btn-primary" href="<?= h($selfUrl . '&theme=' . rawurlencode($theme['folder'])) ?>"><?= __('Inspect Source') ?></a>
               <button type="button" class="btn btn-sm btn-outline" data-tb-fork data-source="<?= h($theme['folder']) ?>" data-name="<?= h($theme['name']) ?>"><?= __('Fork & Edit') ?></button>
+              <?php $renderExportForm((string)$theme['folder']); ?>
             </div>
           <?php else: ?>
             <p class="tb-inspector-error"><?= h((string)$theme['error']) ?></p>
@@ -173,13 +217,19 @@ try {
 
 $theme = $inspection['theme'];
 $forkState = $forkService->forkState($folder);
-$editable = (bool)$forkState['editable'];
+$directState = $forkService->directEditState($folder);
+$dirtyState = $forkService->dirtyState($folder);
+$managedEditable = (bool)$forkState['editable'];
+$directEligible = !$managedEditable && (bool)$directState['editable'];
 $sourceContent = is_string($source['source'] ?? null) ? $source['source'] : '';
 $hasCrLf = str_contains($sourceContent, "\r\n");
 $withoutCrLf = str_replace("\r\n", '', $sourceContent);
 $mixedLineEndings = str_contains($withoutCrLf, "\r") || ($hasCrLf && str_contains($withoutCrLf, "\n"));
 $lineSeparator = $hasCrLf && !$mixedLineEndings ? "\r\n" : "\n";
-$fileEditable = $editable && $source !== null && !empty($source['utf8']) && !$mixedLineEndings;
+$sourceRoundTripSafe = $source !== null && !empty($source['utf8']) && !$mixedLineEndings;
+$fileEditable = ($managedEditable || $directEligible) && $sourceRoundTripSafe;
+$startsReadOnly = $directEligible;
+$revisions = $source !== null ? $forkService->revisions($folder, $fileId, 20) : [];
 $groupedFiles = [];
 foreach ($files as $file) $groupedFiles[$file['category_label']][] = $file;
 $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
@@ -213,23 +263,42 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
       <?php if ($theme['system']): ?><span class="tb-inspector-badge is-system"><?= __('System') ?></span><?php endif; ?>
       <?php if ($theme['store']): ?><span class="tb-inspector-badge is-store"><?= __('Store') ?></span><?php endif; ?>
       <?php if ($forkState['managed']): ?><span class="tb-inspector-badge is-fork"><?= __('Managed Fork') ?></span><?php endif; ?>
+      <?php if (isset($dirtyState['error'])): ?>
+        <span class="tb-inspector-badge is-upstream"><?= __('PHP Source Error') ?></span>
+      <?php elseif (!empty($dirtyState['upstream_changed'])): ?>
+        <span class="tb-inspector-badge is-upstream"><?= __('Upstream PHP Changed') ?> · <?= (int)$dirtyState['changed_count'] ?></span>
+      <?php elseif (!empty($dirtyState['locally_modified'])): ?>
+        <span class="tb-inspector-badge is-dirty"><?= __('Locally Modified PHP') ?> · <?= (int)$dirtyState['changed_count'] ?></span>
+      <?php elseif (!empty($dirtyState['tracked'])): ?>
+        <span class="tb-inspector-badge is-clean"><?= __('PHP Source Clean') ?></span>
+      <?php else: ?>
+        <span class="tb-inspector-badge"><?= __('PHP Source Not Tracked') ?> · <?= (int)($dirtyState['counts']['untracked'] ?? count($files)) ?></span>
+      <?php endif; ?>
     </div>
     <div class="tb-editor-actions">
-      <?php if ($fileEditable): ?><button type="button" id="tb-save-fork" class="btn btn-sm btn-primary"><?= __('Save PHP') ?></button><?php endif; ?>
+      <?php if ($managedEditable && $fileEditable): ?><button type="button" id="tb-save-fork" class="btn btn-sm btn-primary"><?= __('Save PHP') ?></button><?php endif; ?>
+      <?php if ($directEligible && $fileEditable): ?>
+        <button type="button" id="tb-enable-direct" class="btn btn-sm btn-outline"><?= __('Enable Direct Edit') ?></button>
+        <button type="button" id="tb-save-direct" class="btn btn-sm btn-primary" hidden><?= __('Save PHP') ?></button>
+      <?php endif; ?>
       <button type="button" class="btn btn-sm btn-outline" data-tb-fork data-source="<?= h($theme['folder']) ?>" data-name="<?= h($theme['name']) ?>"><?= __('Fork & Edit') ?></button>
+      <?php $renderExportForm($folder); ?>
     </div>
   </div>
 
-  <div class="tb-inspector-notice <?= $editable ? 'is-editable' : '' ?>">
-    <?php if ($fileEditable): ?>
+  <div class="tb-inspector-notice <?= ($managedEditable || $directEligible) ? 'is-editable' : '' ?>">
+    <?php if ($managedEditable && $fileEditable): ?>
       <strong><?= __('Inactive managed fork.') ?></strong>
       <?= __('Existing physical PHP files can be edited with stale-write protection, lint validation, atomic replacement, and a private pre-change revision.') ?>
-    <?php elseif ($editable): ?>
+    <?php elseif ($directEligible && $fileEditable): ?>
+      <strong><?= __('Advanced direct editing is available.') ?></strong>
+      <?= __('Enable it only after reviewing the active and Store update risks. The first change captures a protected PHP baseline and every replacement creates a revision.') ?>
+    <?php elseif ($managedEditable || $directEligible): ?>
       <strong><?= __('Current file is read-only.') ?></strong>
       <?= __('Invalid UTF-8 or mixed line endings cannot be round-tripped safely in the browser editor.') ?>
     <?php else: ?>
       <strong><?= __('Read-only inspector.') ?></strong>
-      <?= h($forkState['managed'] ? __((string)$forkState['reason']) : __('Fork this theme before editing. Source is escaped and is never executed.')) ?>
+      <?= h(__((string)($directState['reason'] ?: ($forkState['managed'] ? $forkState['reason'] : 'Fork this theme before editing.')))) ?>
     <?php endif; ?>
   </div>
 
@@ -266,7 +335,7 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
         <?php if (!$source['utf8']): ?>
           <div class="tb-flash tb-flash-error"><?= __('This source is not valid UTF-8; invalid bytes are replaced for display.') ?></div>
         <?php endif; ?>
-        <textarea id="tb-installed-source" <?= $fileEditable ? '' : 'readonly' ?>></textarea>
+        <textarea id="tb-installed-source" <?= ($fileEditable && !$startsReadOnly) ? '' : 'readonly' ?>></textarea>
       <?php else: ?>
         <div class="tb-inspector-empty"><?= __('This theme contains no PHP files.') ?></div>
       <?php endif; ?>
@@ -281,7 +350,8 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
           <dt><?= __('Modified') ?></dt><dd><?= h(date('Y-m-d H:i:s T', (int)$source['modified_at'])) ?></dd>
           <dt><?= __('Mode') ?></dt><dd><code><?= h($source['mode']) ?></code></dd>
           <dt><?= __('Owner') ?></dt><dd><?= h($source['owner'] . ':' . $source['group']) ?></dd>
-          <dt><?= __('Editor state') ?></dt><dd><?= $fileEditable ? __('Editable inactive fork') : __('Read-only source') ?></dd>
+          <dt><?= __('Editor state') ?></dt><dd><?= $managedEditable && $fileEditable ? __('Editable inactive fork') : ($directEligible && $fileEditable ? __('Direct edit available') : __('Read-only source')) ?></dd>
+          <dt><?= __('PHP Baseline') ?></dt><dd><?= isset($dirtyState['error']) ? __('Error: source state could not be verified') : (!empty($dirtyState['tracked']) ? (!empty($dirtyState['upstream_changed']) ? __('Upstream PHP version changed') : (!empty($dirtyState['locally_modified']) ? __('Locally modified PHP') : __('PHP source clean'))) : __('PHP source not tracked')) ?></dd>
         </dl>
         <h4>SHA-256</h4>
         <code class="tb-inspector-hash"><?= h($source['sha256']) ?></code>
@@ -296,6 +366,22 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
           </ul>
         <?php else: ?>
           <p class="muted"><?= __('No local literal require/include dependencies detected.') ?></p>
+        <?php endif; ?>
+        <h4><?= __('Source Revisions') ?></h4>
+        <?php if ($revisions): ?>
+          <ul class="tb-revision-list">
+            <?php foreach ($revisions as $revision): ?>
+              <li>
+                <span><?= h((string)$revision['created_at']) ?></span>
+                <small><?= h((string)($revision['operation'] ?? 'save')) ?> · <?= h(substr((string)$revision['previous_sha256'], 0, 10)) ?></small>
+                <?php if ($fileEditable): ?>
+                  <button type="button" class="btn btn-sm btn-outline" data-tb-restore="<?= h((string)$revision['revision_id']) ?>"><?= __('Restore') ?></button>
+                <?php endif; ?>
+              </li>
+            <?php endforeach; ?>
+          </ul>
+        <?php else: ?>
+          <p class="muted"><?= __('No restorable revisions for this source file.') ?></p>
         <?php endif; ?>
       <?php endif; ?>
     </aside>
@@ -318,6 +404,20 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
     </div>
   </details>
   <?php $renderForkModal(); ?>
+  <?php if ($directEligible && $fileEditable): ?>
+    <div id="tb-direct-modal" class="tb-modal" style="display:none">
+      <div class="tb-modal-content">
+        <div class="tb-modal-header"><h4><?= __('Enable Direct PHP Editing') ?></h4><button type="button" class="tb-modal-close" data-tb-direct-close>&times;</button></div>
+        <div class="tb-modal-body">
+          <p><strong><?= h($theme['name']) ?></strong> <code><?= h($folder) ?></code></p>
+          <label class="tb-risk-check"><input type="checkbox" id="tb-ack-direct"> <?= __('I understand that saved PHP executes on the server and can break this site.') ?></label>
+          <?php if ($directState['active'] || $directState['assigned']): ?><label class="tb-risk-check"><input type="checkbox" id="tb-ack-active"> <?= __('I understand this theme is active or assigned and saved changes can affect live requests immediately.') ?></label><?php endif; ?>
+          <?php if ($directState['store']): ?><label class="tb-risk-check"><input type="checkbox" id="tb-ack-store"> <?= __('I understand Store updates require an explicit destructive decision before replacing locally modified or untracked PHP source.') ?></label><?php endif; ?>
+        </div>
+        <div class="tb-modal-footer"><button type="button" class="btn btn-outline" data-tb-direct-close><?= __('Cancel') ?></button><button type="button" id="tb-confirm-direct" class="btn btn-danger"><?= __('Enable Direct Edit') ?></button></div>
+      </div>
+    </div>
+  <?php endif; ?>
 </div>
 
 <?php if ($source): ?>
@@ -332,8 +432,8 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
     mode: 'application/x-httpd-php',
     lineNumbers: true,
     lineWrapping: false,
-    readOnly: <?= $fileEditable ? 'false' : 'true' ?>,
-    cursorBlinkRate: <?= $fileEditable ? '530' : '-1' ?>,
+    readOnly: <?= ($fileEditable && !$startsReadOnly) ? 'false' : 'true' ?>,
+    cursorBlinkRate: <?= ($fileEditable && !$startsReadOnly) ? '530' : '-1' ?>,
     lineSeparator: <?= json_encode($lineSeparator) ?>,
     viewportMargin: 40,
     foldGutter: true,
@@ -346,9 +446,44 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
   source.setOption('theme', dark ? 'dracula' : 'default');
   <?php if ($fileEditable): ?>
   var currentHash = <?= json_encode((string)$source['sha256']) ?>;
-  var saveButton = document.getElementById('tb-save-fork');
-  function saveForkSource() {
-    if (!saveButton || saveButton.disabled) return;
+  var currentTargetToken = <?= json_encode((string)($source['target_token'] ?? '')) ?>;
+  var directMode = <?= $directEligible ? 'true' : 'false' ?>;
+  var directEnabled = !directMode;
+  var saveButton = document.getElementById(directMode ? 'tb-save-direct' : 'tb-save-fork');
+  var cleanGeneration = source.changeGeneration();
+  var directModal = document.getElementById('tb-direct-modal');
+  var enableButton = document.getElementById('tb-enable-direct');
+  function acknowledgement(name) {
+    var input = document.getElementById('tb-ack-' + name);
+    return !input || input.checked;
+  }
+  function enableDirectEditing() {
+    if (!acknowledgement('direct') || !acknowledgement('active') || !acknowledgement('store')) {
+      alert(<?= json_encode(__('Confirm every applicable risk before enabling direct editing.')) ?>);
+      return;
+    }
+    directEnabled = true;
+    source.setOption('readOnly', false);
+    source.setOption('cursorBlinkRate', 530);
+    directModal.style.display = 'none';
+    enableButton.hidden = true;
+    saveButton.hidden = false;
+    source.focus();
+  }
+  if (enableButton) enableButton.addEventListener('click', function() { directModal.style.display = 'flex'; });
+  var confirmDirect = document.getElementById('tb-confirm-direct');
+  if (confirmDirect) confirmDirect.addEventListener('click', enableDirectEditing);
+  document.querySelectorAll('[data-tb-direct-close]').forEach(function(button) {
+    button.addEventListener('click', function() { directModal.style.display = 'none'; });
+  });
+  function appendDirectFields(data) {
+    data.append('target_token', currentTargetToken);
+    data.append('ack_direct', '1');
+    data.append('ack_active', <?= (!empty($directState['active']) || !empty($directState['assigned'])) ? "'1'" : "'0'" ?>);
+    data.append('ack_store', <?= !empty($directState['store']) ? "'1'" : "'0'" ?>);
+  }
+  function saveInstalledSource() {
+    if (!directEnabled || !saveButton || saveButton.disabled) return;
     saveButton.disabled = true;
     saveButton.textContent = <?= json_encode(__('Saving and linting...')) ?>;
     var data = new FormData();
@@ -357,13 +492,19 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
     data.append('file_id', <?= json_encode($fileId) ?>);
     data.append('expected_hash', currentHash);
     data.append('content', source.getValue());
-    fetch(<?= json_encode($base . '/?action=api&page=admin/tools/theme-builder/api/save_fork_file') ?>, { method: 'POST', body: data })
+    if (directMode) appendDirectFields(data);
+    fetch(directMode
+      ? <?= json_encode($base . '/?action=api&page=admin/tools/theme-builder/api/save_installed_file') ?>
+      : <?= json_encode($base . '/?action=api&page=admin/tools/theme-builder/api/save_fork_file') ?>,
+      { method: 'POST', body: data })
     .then(function(response) { return response.json(); })
     .then(function(result) {
       if (!result.success) throw new Error(result.error || <?= json_encode(__('Save failed.')) ?>);
       currentHash = result.sha256;
-      saveButton.textContent = <?= json_encode(__('Saved with revision')) ?>;
-      setTimeout(function() { saveButton.disabled = false; saveButton.textContent = <?= json_encode(__('Save PHP')) ?>; }, 1400);
+      if (result.target_token) currentTargetToken = result.target_token;
+      cleanGeneration = source.changeGeneration();
+      saveButton.textContent = result.unchanged ? <?= json_encode(__('No changes')) ?> : <?= json_encode(__('Saved with revision')) ?>;
+      setTimeout(function() { window.location.reload(); }, 700);
     })
     .catch(function(error) {
       alert(error.message);
@@ -371,12 +512,45 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
       saveButton.textContent = <?= json_encode(__('Save PHP')) ?>;
     });
   }
-  saveButton.addEventListener('click', saveForkSource);
+  saveButton.addEventListener('click', saveInstalledSource);
+  document.querySelectorAll('[data-tb-restore]').forEach(function(button) {
+    button.addEventListener('click', function() {
+      if (!directEnabled) {
+        directModal.style.display = 'flex';
+        return;
+      }
+      if (!source.isClean(cleanGeneration)
+          && !confirm(<?= json_encode(__('The editor has unsaved changes. Restore will discard that browser buffer; only the current saved server source is revisioned. Continue?')) ?>)) return;
+      if (!confirm(<?= json_encode(__('Restore this revision? Current source will first be saved as an undo revision.')) ?>)) return;
+      button.disabled = true;
+      var data = new FormData();
+      data.append('csrf_token', <?= json_encode($csrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>);
+      data.append('theme', <?= json_encode($folder) ?>);
+      data.append('file_id', <?= json_encode($fileId) ?>);
+      data.append('revision_id', button.dataset.tbRestore || '');
+      data.append('expected_hash', currentHash);
+      data.append('edit_policy', directMode ? 'direct' : 'managed');
+      appendDirectFields(data);
+      fetch(<?= json_encode($base . '/?action=api&page=admin/tools/theme-builder/api/restore_theme_revision') ?>, { method: 'POST', body: data })
+      .then(function(response) { return response.json(); })
+      .then(function(result) {
+        if (!result.success) throw new Error(result.error || <?= json_encode(__('Restore failed.')) ?>);
+        cleanGeneration = source.changeGeneration();
+        window.location.reload();
+      })
+      .catch(function(error) { alert(error.message); button.disabled = false; });
+    });
+  });
   document.addEventListener('keydown', function(event) {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
       event.preventDefault();
-      saveForkSource();
+      saveInstalledSource();
     }
+  });
+  window.addEventListener('beforeunload', function(event) {
+    if (source.isClean(cleanGeneration)) return;
+    event.preventDefault();
+    event.returnValue = '';
   });
   <?php endif; ?>
 })();

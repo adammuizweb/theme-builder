@@ -78,14 +78,14 @@ $assetLines = static function (mixed $entries): string {
     </div>
   </div>
 
-  <div class="tb-editor-main">
+  <div class="tb-editor-main" data-mobile-panel="code">
     <div class="tb-editor-sidebar">
       <div class="tb-sidebar-section">
         <div class="tb-sidebar-header">
           <h4><?= __('Slots') ?></h4>
-          <button class="tb-collapse-btn" id="tb-toggle-slots" title="<?= __('Collapse') ?>">&laquo;</button>
+          <button type="button" class="tb-collapse-btn" id="tb-toggle-slots" aria-controls="tb-slots-content" aria-expanded="true" aria-label="<?= h(__('Toggle Slots panel')) ?>" title="<?= __('Collapse') ?>">&laquo;</button>
         </div>
-        <ul class="tb-slot-list">
+        <ul class="tb-slot-list" id="tb-slots-content">
           <?php foreach ($slotLabels as $slotKey => $label):
             $info = $completion[$slotKey] ?? [];
             $isActive = $slotKey === $currentSlot;
@@ -104,7 +104,7 @@ $assetLines = static function (mixed $entries): string {
         <span class="tb-code-file"><?= h($currentFile) ?></span>
         <div style="display:flex;align-items:center;gap:.5rem;">
           <span class="tb-code-slot"><?= h($slotLabels[$currentSlot] ?? $currentSlot) ?></span>
-          <button class="tb-collapse-btn" id="tb-toggle-editor" title="<?= __('Maximize') ?>">&#x26F6;</button>
+          <button type="button" class="tb-collapse-btn" id="tb-toggle-editor" aria-controls="tb-code-content" aria-expanded="true" aria-pressed="false" aria-label="<?= h(__('Toggle code editor')) ?>" title="<?= __('Maximize') ?>">&#x26F6;</button>
         </div>
       </div>
       <textarea id="tb-code-editor"><?= h($currentContent) ?></textarea>
@@ -113,13 +113,13 @@ $assetLines = static function (mixed $entries): string {
     <div class="tb-editor-ref">
       <div class="tb-ref-header">
         <h4><?= __('Variables') ?></h4>
-        <button class="tb-collapse-btn" id="tb-toggle-vars" title="<?= __('Collapse') ?>">&raquo;</button>
+        <button type="button" class="tb-collapse-btn" id="tb-toggle-vars" aria-controls="tb-vars-content" aria-expanded="true" aria-label="<?= h(__('Toggle Variables panel')) ?>" title="<?= __('Collapse') ?>">&raquo;</button>
       </div>
-      <?= VarReference::renderPanel($currentSlot) ?>
+      <div id="tb-vars-content"><?= VarReference::renderPanel($currentSlot) ?></div>
     </div>
 
-    <button class="tb-restore-btn tb-restore-slots" id="tb-restore-slots" title="<?= __('Show Slots') ?>">&raquo;</button>
-    <button class="tb-restore-btn tb-restore-vars" id="tb-restore-vars" title="<?= __('Show Variables') ?>">&laquo;</button>
+    <button type="button" class="tb-restore-btn tb-restore-slots" id="tb-restore-slots" aria-controls="tb-slots-content" aria-label="<?= h(__('Show Slots')) ?>" title="<?= __('Show Slots') ?>">&raquo;</button>
+    <button type="button" class="tb-restore-btn tb-restore-vars" id="tb-restore-vars" aria-controls="tb-vars-content" aria-label="<?= h(__('Show Variables')) ?>" title="<?= __('Show Variables') ?>">&laquo;</button>
   </div>
 
   <div id="tb-manifest-modal" class="tb-modal" style="display:none">
@@ -190,6 +190,7 @@ $assetLines = static function (mixed $entries): string {
     foldGutter: true, gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"]
   });
   editor.setSize('100%', 'calc(100vh - 240px)');
+  editor.getWrapperElement().id = 'tb-code-content';
 
   document.getElementById('tb-btn-save').addEventListener('click', function() {
     var btn = this; btn.disabled = true; btn.textContent = '<?= __('Saving...') ?>';
@@ -269,61 +270,114 @@ $assetLines = static function (mixed $entries): string {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); document.getElementById('tb-btn-save').click(); }
   });
 
-  // Panel collapse toggles
+  // Desktop collapse and mobile accordion share controls but retain separate state.
   var mainEl = document.querySelector('.tb-editor-main');
-  document.getElementById('tb-toggle-slots').addEventListener('click', function() {
+  var slotsBtn = document.getElementById('tb-toggle-slots');
+  var varsBtn = document.getElementById('tb-toggle-vars');
+  var editorBtn = document.getElementById('tb-toggle-editor');
+  var restoreSlotsBtn = document.getElementById('tb-restore-slots');
+  var restoreVarsBtn = document.getElementById('tb-restore-vars');
+  var mobileQuery = window.matchMedia('(max-width: 900px)');
+  var mobilePanel = 'code';
+  var isMaximized = false;
+
+  function refreshEditorAfterLayout() {
+    requestAnimationFrame(function() { requestAnimationFrame(function() { editor.refresh(); }); });
+  }
+  function syncPanelControls() {
+    var mobile = mobileQuery.matches;
+    var slotsOpen = mobile ? mobilePanel === 'slots' : !mainEl.classList.contains('slots-collapsed');
+    var varsOpen = mobile ? mobilePanel === 'vars' : !mainEl.classList.contains('vars-collapsed');
+    var codeOpen = !mobile || mobilePanel === 'code';
+    slotsBtn.setAttribute('aria-expanded', String(slotsOpen));
+    varsBtn.setAttribute('aria-expanded', String(varsOpen));
+    editorBtn.setAttribute('aria-expanded', String(codeOpen));
+    editorBtn.setAttribute('aria-pressed', String(!mobile && isMaximized));
+    if (mobile) {
+      slotsBtn.innerHTML = slotsOpen ? '&minus;' : '&plus;';
+      varsBtn.innerHTML = varsOpen ? '&minus;' : '&plus;';
+      editorBtn.innerHTML = codeOpen ? '&minus;' : '&plus;';
+      slotsBtn.title = slotsOpen ? '<?= __('Collapse') ?>' : '<?= __('Expand') ?>';
+      varsBtn.title = varsOpen ? '<?= __('Collapse') ?>' : '<?= __('Expand') ?>';
+      editorBtn.title = codeOpen ? '<?= __('Collapse') ?>' : '<?= __('Expand') ?>';
+    } else {
+      slotsBtn.innerHTML = slotsOpen ? '&laquo;' : '&raquo;';
+      varsBtn.innerHTML = varsOpen ? '&raquo;' : '&laquo;';
+      editorBtn.innerHTML = isMaximized ? '&#x2716;' : '&#x26F6;';
+      slotsBtn.title = slotsOpen ? '<?= __('Collapse') ?>' : '<?= __('Expand') ?>';
+      varsBtn.title = varsOpen ? '<?= __('Collapse') ?>' : '<?= __('Expand') ?>';
+      editorBtn.title = isMaximized ? '<?= __('Restore') ?>' : '<?= __('Maximize') ?>';
+    }
+  }
+  function openMobilePanel(panel) {
+    mobilePanel = mobilePanel === panel ? 'none' : panel;
+    mainEl.dataset.mobilePanel = mobilePanel;
+    syncPanelControls();
+    if (mobilePanel === 'code') refreshEditorAfterLayout();
+  }
+  function applyResponsiveMode() {
+    if (mobileQuery.matches) mainEl.dataset.mobilePanel = mobilePanel;
+    else delete mainEl.dataset.mobilePanel;
+    syncPanelControls();
+    refreshEditorAfterLayout();
+  }
+
+  slotsBtn.addEventListener('click', function() {
+    if (mobileQuery.matches) { openMobilePanel('slots'); return; }
     mainEl.classList.toggle('slots-collapsed');
     this.innerHTML = mainEl.classList.contains('slots-collapsed') ? '&raquo;' : '&laquo;';
     this.title = mainEl.classList.contains('slots-collapsed') ? '<?= __('Expand') ?>' : '<?= __('Collapse') ?>';
-    syncRestoreVisibility();
-    setTimeout(function() { editor.refresh(); }, 250);
+    syncPanelControls();
+    refreshEditorAfterLayout();
   });
-  document.getElementById('tb-toggle-vars').addEventListener('click', function() {
+  varsBtn.addEventListener('click', function() {
+    if (mobileQuery.matches) { openMobilePanel('vars'); return; }
     mainEl.classList.toggle('vars-collapsed');
     this.innerHTML = mainEl.classList.contains('vars-collapsed') ? '&laquo;' : '&raquo;';
     this.title = mainEl.classList.contains('vars-collapsed') ? '<?= __('Expand') ?>' : '<?= __('Collapse') ?>';
-    syncRestoreVisibility();
-    setTimeout(function() { editor.refresh(); }, 250);
+    syncPanelControls();
+    refreshEditorAfterLayout();
   });
 
-  // Code editor maximize/minimize — collapses both side panels
-  var isMaximized = false;
-  var editorBtn = document.getElementById('tb-toggle-editor');
   editorBtn.addEventListener('click', function() {
+    if (mobileQuery.matches) { openMobilePanel('code'); return; }
     isMaximized = !isMaximized;
     mainEl.classList.toggle('slots-collapsed', isMaximized);
     mainEl.classList.toggle('vars-collapsed', isMaximized);
     editorBtn.innerHTML = isMaximized ? '&#x2716;' : '&#x26F6;';
     editorBtn.title = isMaximized ? '<?= __('Restore') ?>' : '<?= __('Maximize') ?>';
-    syncRestoreVisibility();
-    setTimeout(function() { editor.refresh(); }, 250);
+    syncPanelControls();
+    refreshEditorAfterLayout();
   });
 
-  // Restore buttons for collapsed panels
-  document.getElementById('tb-restore-slots').addEventListener('click', function() {
+  restoreSlotsBtn.addEventListener('click', function() {
     mainEl.classList.remove('slots-collapsed');
-    document.getElementById('tb-toggle-slots').innerHTML = '&laquo;';
-    document.getElementById('tb-toggle-slots').title = '<?= __('Collapse') ?>';
-    syncRestoreVisibility();
+    slotsBtn.innerHTML = '&laquo;';
+    slotsBtn.title = '<?= __('Collapse') ?>';
     isMaximized = false;
     editorBtn.innerHTML = '&#x26F6;';
     editorBtn.title = '<?= __('Maximize') ?>';
-    setTimeout(function() { editor.refresh(); }, 250);
+    syncPanelControls();
+    slotsBtn.focus();
+    refreshEditorAfterLayout();
   });
-  document.getElementById('tb-restore-vars').addEventListener('click', function() {
+  restoreVarsBtn.addEventListener('click', function() {
     mainEl.classList.remove('vars-collapsed');
-    document.getElementById('tb-toggle-vars').innerHTML = '&raquo;';
-    document.getElementById('tb-toggle-vars').title = '<?= __('Collapse') ?>';
-    syncRestoreVisibility();
+    varsBtn.innerHTML = '&raquo;';
+    varsBtn.title = '<?= __('Collapse') ?>';
     isMaximized = false;
     editorBtn.innerHTML = '&#x26F6;';
     editorBtn.title = '<?= __('Maximize') ?>';
-    setTimeout(function() { editor.refresh(); }, 250);
+    syncPanelControls();
+    varsBtn.focus();
+    refreshEditorAfterLayout();
   });
-  function syncRestoreVisibility() {
-    if (!mainEl.classList.contains('slots-collapsed')) document.getElementById('tb-restore-slots').style.display = '';
-    if (!mainEl.classList.contains('vars-collapsed')) document.getElementById('tb-restore-vars').style.display = '';
-  }
+  mainEl.addEventListener('transitionend', function(event) {
+    if (event.propertyName === 'grid-template-columns') editor.refresh();
+  });
+  if (mobileQuery.addEventListener) mobileQuery.addEventListener('change', applyResponsiveMode);
+  else mobileQuery.addListener(applyResponsiveMode);
+  applyResponsiveMode();
 
   // Sync CodeMirror theme with CMS dark mode
   function syncCMTheme() {

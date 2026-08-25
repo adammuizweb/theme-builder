@@ -35,6 +35,7 @@ $write = static function (string $relative, string $content) use ($themesRoot): 
 register_shutdown_function(static function () use ($root, $remove): void { $remove($root); });
 
 try {
+    $coreFolder = '_' . str_repeat('A', 126) . 'Z';
     $write('foundation/theme.json', "{\"name\":\"Default\",\"version\":\"2.3.86\"}\n");
     $write('foundation/header.php', "<?php echo 'default header';\n");
     $write('foundation/footer.php', "<?php echo 'default footer';\n");
@@ -53,11 +54,17 @@ try {
     $write('apu/partials/components/card.php', "<?php echo 'card';\n");
     $write('apu/large.php', '<?php /* ' . str_repeat('x', 270000) . ' */');
     $write('unregistered/header.php', "<?php echo 'hidden';\n");
+    $write('conflicting/theme.json', '{"folder":"other-theme","name":"Conflict","version":"1.0.0"}');
+    $write('conflicting/header.php', "<?php echo 'conflict';\n");
+    $write('non-string/theme.json', '{"folder":42,"name":"Non-string","version":"1.0.0"}');
+    $write('non-string/header.php', "<?php echo 'non-string';\n");
+    $write($coreFolder . '/theme.json', json_encode(['folder' => $coreFolder, 'name' => 'Core Grammar', 'version' => '1.0.0'], JSON_THROW_ON_ERROR));
+    $write($coreFolder . '/header.php', "<?php echo 'core grammar';\n");
 
     $pdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
     $pdo->exec('CREATE TABLE themes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        folder_name TEXT NOT NULL UNIQUE,
+        folder_name TEXT COLLATE NOCASE NOT NULL UNIQUE,
         name TEXT NOT NULL,
         description TEXT NOT NULL DEFAULT \'\',
         version TEXT NOT NULL DEFAULT \'\',
@@ -71,6 +78,9 @@ try {
     $insert = $pdo->prepare('INSERT INTO themes (folder_name, name, version, is_active, is_system) VALUES (?, ?, ?, ?, ?)');
     $insert->execute(['foundation', 'Database Default', '2.3.86', 0, 1]);
     $insert->execute(['apu', 'Database APU', '3.2.1', 1, 0]);
+    $insert->execute([$coreFolder, 'Core Grammar', '1.0.0', 0, 0]);
+    $insert->execute(['conflicting', 'Conflict', '1.0.0', 0, 0]);
+    $insert->execute(['non-string', 'Non-string', '1.0.0', 0, 0]);
 
     $unsafeDir = $themesRoot . '/unsafe';
     mkdir($unsafeDir, 0770);
@@ -80,7 +90,8 @@ try {
     $inspector = new InstalledThemeInspector($pdo);
     $themes = $inspector->themes();
     $apuRows = array_values(array_filter($themes, static fn(array $theme): bool => $theme['folder'] === 'apu'));
-    $check(count($apuRows) === 1, 'registered APU fixture appears in the theme list');
+    $check(count($apuRows) === 1 && ($apuRows[0]['folder'] ?? null) === 'apu',
+        'a manifest with no folder uses the supplied physical folder identity');
     $check(($apuRows[0]['name'] ?? null) === 'APU Fixture' && ($apuRows[0]['version'] ?? null) === '3.2.2', 'physical manifest metadata takes precedence over stale registry metadata');
     $check(($apuRows[0]['active'] ?? false) === true && ($apuRows[0]['store'] ?? false) === true, 'active and Store status are reported');
     $check(($apuRows[0]['php_files'] ?? null) === 7 && ($apuRows[0]['inspectable'] ?? false) === true, 'recursive PHP inventory count is reported');
@@ -123,8 +134,20 @@ try {
     $hero = $inspector->source('apu', (string)$byPath['main/sections/hero.php']['id']);
     $check(($hero['path'] ?? null) === 'main/sections/hero.php' && ($hero['source'] ?? null) === "<?php echo 'hero';\n", 'opaque ID opens the expected regular-file bytes');
     $check(($hero['sha256'] ?? null) === hash('sha256', "<?php echo 'hero';\n") && ($hero['utf8'] ?? false) === true, 'source metadata contains a verified hash and encoding status');
+    $check(preg_match('/\A[a-f0-9]{64}\z/D', (string)($hero['target_token'] ?? '')) === 1, 'source metadata binds browser state to the physical theme root and file identity');
     $check($inspector->source('apu', str_repeat('0', 64)) === null, 'unknown opaque file ID reveals no source');
     $check($inspector->source('apu', '../../etc/passwd') === null, 'path-shaped file selector is rejected');
+    $wrongCaseRejected = false;
+    try { $inspector->inspect('APU'); } catch (RuntimeException) { $wrongCaseRejected = true; }
+    $check($wrongCaseRejected, 'case-insensitive database matches are rejected unless folder case is exact');
+    foreach (['conflicting', 'non-string'] as $invalidManifestFolder) {
+        $manifestIdentityRejected = false;
+        try { $inspector->inspect($invalidManifestFolder); } catch (RuntimeException) { $manifestIdentityRejected = true; }
+        $check($manifestIdentityRejected, 'manifest rejects invalid supplied folder identity: ' . $invalidManifestFolder);
+    }
+    $coreInspection = $inspector->inspect($coreFolder);
+    $check(($coreInspection['theme']['folder'] ?? '') === $coreFolder && count($coreInspection['files']) === 1,
+        'installed inspector accepts Core 128-byte folders beginning with underscore');
 
     $unregisteredRejected = false;
     try {
@@ -141,6 +164,11 @@ try {
         $invalidFolderRejected = true;
     }
     $check($invalidFolderRejected, 'theme-folder traversal is rejected before filesystem resolution');
+    foreach (['.', '..', str_repeat('a', 129)] as $invalidCoreFolder) {
+        $rejected = false;
+        try { $inspector->inspect($invalidCoreFolder); } catch (InvalidArgumentException) { $rejected = true; }
+        $check($rejected, 'installed inspector rejects non-Core folder identity: ' . strlen($invalidCoreFolder));
+    }
 
     foreach ($beforeHashes as $path => $hash) {
         $check(hash_file('sha256', $themesRoot . '/apu/' . $path) === $hash, 'inspection does not mutate ' . $path);
