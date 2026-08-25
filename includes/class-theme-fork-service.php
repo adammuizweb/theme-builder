@@ -582,7 +582,7 @@ final class ThemeForkService
 
     private function metadataPath(string $folder): string
     {
-        return $this->privateDirectory('installed-forks') . '/' . hash('sha256', $folder) . '.json';
+        return $this->privateDirectory('.installed-forks') . '/' . hash('sha256', $folder) . '.json';
     }
 
     private function readMetadata(string $folder): ?array
@@ -601,7 +601,7 @@ final class ThemeForkService
     private function createRevision(string $folder, int $themeId, string $fileId, string $relative, string $previous,
         string $previousHash, string $resultHash, array $targetStat, int $actorId, string $note, string $sourceVersion): string
     {
-        $revisionRoot = $this->privateDirectory('revisions');
+        $revisionRoot = $this->privateDirectory('.revisions');
         $themeDir = $this->ensurePrivateChild($revisionRoot, (string)$themeId);
         $fileDir = $this->ensurePrivateChild($themeDir, $fileId);
         $revisionId = gmdate('Ymd\THis\Z') . '-' . bin2hex(random_bytes(8));
@@ -644,7 +644,7 @@ final class ThemeForkService
         if ($themeId < 1 || preg_match('/\A[a-f0-9]{64}\z/D', $fileId) !== 1
             || preg_match('/\A\d{8}T\d{6}Z-[a-f0-9]{16}\z/D', $revisionId) !== 1) return;
         try {
-            $root = $this->privateDirectory('revisions');
+            $root = $this->privateDirectory('.revisions');
             $path = $root . '/' . $themeId . '/' . $fileId . '/' . $revisionId;
             $real = realpath($path);
             if ($real !== false && $this->isWithin($root, $real)) $this->removeOwnedTree($real);
@@ -826,7 +826,7 @@ final class ThemeForkService
 
     private function ensurePrivateChild(string $parent, string $name): string
     {
-        if (preg_match('/\A(?:[a-z0-9][a-z0-9_-]{0,99}|\.locks)\z/D', $name) !== 1) throw new RuntimeException('Private storage identity is invalid.');
+        if (preg_match('/\A(?:[a-z0-9][a-z0-9_-]{0,99}|\.(?:locks|installed-forks|revisions))\z/D', $name) !== 1) throw new RuntimeException('Private storage identity is invalid.');
         $parentReal = realpath($parent);
         if ($parentReal === false || !is_dir($parentReal) || is_link($parent)) throw new RuntimeException('Private storage is unavailable.');
         $path = $parentReal . '/' . $name;

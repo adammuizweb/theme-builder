@@ -155,10 +155,12 @@ JSON;
     $check((int)$pdo->query("SELECT COUNT(*) FROM assignments")->fetchColumn() === 1
         && (int)$pdo->query("SELECT COUNT(*) FROM theme_zone_items")->fetchColumn() === 1, 'fork does not copy or alter assignments and Theme Zones');
 
-    $metadataPath = $workspace . '/installed-forks/' . hash('sha256', 'source-fork') . '.json';
+    $metadataPath = $workspace . '/.installed-forks/' . hash('sha256', 'source-fork') . '.json';
     $metadata = json_decode((string)file_get_contents($metadataPath), true, 32, JSON_THROW_ON_ERROR);
     $check(($metadata['source']['folder'] ?? null) === 'source' && ($metadata['source']['version'] ?? null) === '4.5.6'
         && ($metadata['created_by'] ?? null) === 7, 'protected metadata records fork provenance outside the public theme');
+    $privateDrafts = array_filter(ThemeWorkspace::listThemes(), static fn(array $theme): bool => str_contains((string)$theme['slug'], 'fork') || str_contains((string)$theme['slug'], 'revision'));
+    $check($privateDrafts === [], 'hidden fork metadata and revision namespaces never appear as draft themes');
     $state = $service->forkState('source-fork');
     $check(($state['managed'] ?? false) === true && ($state['editable'] ?? false) === true, 'inactive Theme Builder fork is eligible for editing');
     $check(($service->forkState('source')['editable'] ?? true) === false, 'original Store theme remains read-only');
@@ -186,7 +188,7 @@ JSON;
     $changed = "<?php\necho 'edited fork';\n";
     $save = $service->savePhp('source-fork', $leafId, $changed, (string)$leafBefore['sha256'], 7, 'Contract edit');
     $check(($save['success'] ?? false) === true && hash_file('sha256', $forkRoot . '/main/sections/hero.php') === hash('sha256', $changed), 'nested managed-fork PHP is linted and atomically saved');
-    $revision = $workspace . '/revisions/' . $targetRow['id'] . '/' . $leafId . '/' . $save['revision_id'];
+    $revision = $workspace . '/.revisions/' . $targetRow['id'] . '/' . $leafId . '/' . $save['revision_id'];
     $check(is_file($revision . '/source.php') && (string)file_get_contents($revision . '/source.php') === "<?php\necho 'hero';\n", 'durable private revision contains exact pre-change bytes');
     $revisionMeta = json_decode((string)file_get_contents($revision . '/revision.json'), true, 32, JSON_THROW_ON_ERROR);
     $check(($revisionMeta['relative_path'] ?? null) === 'main/sections/hero.php' && ($revisionMeta['actor_user_id'] ?? null) === 7
@@ -197,7 +199,7 @@ JSON;
     $headerChanged = "<?php\necho 'commit-safe';\n";
     $pdo->failNextCommit = true;
     $commitFailureSave = $service->savePhp('source-fork', $headerId, $headerChanged, (string)$headerBefore['sha256'], 7, 'Commit failure fixture');
-    $commitRevision = $workspace . '/revisions/' . $targetRow['id'] . '/' . $headerId . '/' . ($commitFailureSave['revision_id'] ?? 'missing');
+    $commitRevision = $workspace . '/.revisions/' . $targetRow['id'] . '/' . $headerId . '/' . ($commitFailureSave['revision_id'] ?? 'missing');
     $check(($commitFailureSave['success'] ?? false) === true && isset($commitFailureSave['warning'])
         && (string)file_get_contents($forkRoot . '/header.php') === $headerChanged && is_file($commitRevision . '/source.php'),
         'ambiguous database commit after replacement reports verified success and preserves its revision');
