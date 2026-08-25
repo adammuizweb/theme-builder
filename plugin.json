@@ -115,7 +115,7 @@
     ]
   },
   "assets": {
-    "css": ["/static/plugins/theme-builder/theme-builder.css"],
+    "css": ["/static/plugins/theme-builder/theme-builder.css?v=1.2.1"],
     "js": []
   }
 }
