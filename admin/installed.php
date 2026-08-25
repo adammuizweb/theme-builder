@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-// Installed Theme Inspector - source is displayed but never executed or mutated.
+// Installed Theme Inspector and managed Fork & Edit workflow.
 
 if (!function_exists('h')) {
     function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
@@ -15,7 +15,91 @@ $base = defined('ADMIN_BASE_PATH') ? ADMIN_BASE_PATH : '/adiwira';
 $dashUrl = $base . '/?page=admin/tools/theme-builder';
 $selfUrl = $base . '/?page=admin/tools/theme-builder/installed';
 $inspector = new InstalledThemeInspector($pdo);
+$forkService = new ThemeForkService($pdo);
+$csrfToken = csrf_token();
 $folder = trim((string)($_GET['theme'] ?? ''));
+$renderForkModal = static function () use ($base, $selfUrl, $csrfToken): void {
+?>
+<div id="tb-fork-modal" class="tb-modal" style="display:none">
+  <div class="tb-modal-content">
+    <div class="tb-modal-header">
+      <h4><?= __('Fork Installed Theme') ?></h4>
+      <button type="button" class="tb-modal-close" data-tb-fork-close>&times;</button>
+    </div>
+    <form id="tb-fork-form">
+      <div class="tb-modal-body">
+        <input type="hidden" name="csrf_token" value="<?= h($csrfToken) ?>">
+        <input type="hidden" id="tb-fork-source" name="source_theme" value="">
+        <p class="muted"><?= __('The complete physical theme will be copied, detached from its Store identity, registered inactive, and opened for safe PHP editing. Database customizations and assignments are not copied.') ?></p>
+        <div class="tb-field">
+          <label for="tb-fork-target"><?= __('New Folder') ?> *</label>
+          <input type="text" id="tb-fork-target" name="target_folder" required pattern="[a-z0-9][a-z0-9_\-]{0,49}" maxlength="50" placeholder="my-theme-fork">
+          <small><?= __('Lowercase letters, numbers, hyphens, and underscores only.') ?></small>
+        </div>
+        <div class="tb-field">
+          <label for="tb-fork-name"><?= __('Runtime Name') ?> *</label>
+          <input type="text" id="tb-fork-name" name="name" required maxlength="150">
+        </div>
+        <div class="tb-field">
+          <label for="tb-fork-title"><?= __('Human Title') ?> *</label>
+          <input type="text" id="tb-fork-title" name="title" required maxlength="150">
+        </div>
+      </div>
+      <div class="tb-modal-footer">
+        <button type="button" class="btn btn-outline" data-tb-fork-close><?= __('Cancel') ?></button>
+        <button type="submit" id="tb-fork-submit" class="btn btn-primary"><?= __('Create Inactive Fork') ?></button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+(function() {
+  var modal = document.getElementById('tb-fork-modal');
+  var form = document.getElementById('tb-fork-form');
+  if (!modal || !form) return;
+  var submit = document.getElementById('tb-fork-submit');
+  var sourceInput = document.getElementById('tb-fork-source');
+  var targetInput = document.getElementById('tb-fork-target');
+  var nameInput = document.getElementById('tb-fork-name');
+  var titleInput = document.getElementById('tb-fork-title');
+  document.querySelectorAll('[data-tb-fork]').forEach(function(button) {
+    button.addEventListener('click', function() {
+      var source = this.dataset.source || '';
+      var name = this.dataset.name || source;
+      sourceInput.value = source;
+      targetInput.value = (source.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^[-_]+|[-_]+$/g, '') + '-fork').slice(0, 50);
+      nameInput.value = name + ' Fork';
+      titleInput.value = name + ' Fork';
+      modal.style.display = 'flex';
+      targetInput.focus();
+    });
+  });
+  document.querySelectorAll('[data-tb-fork-close]').forEach(function(button) {
+    button.addEventListener('click', function() { modal.style.display = 'none'; });
+  });
+  form.addEventListener('submit', function(event) {
+    event.preventDefault();
+    submit.disabled = true;
+    submit.textContent = <?= json_encode(__('Forking and verifying...')) ?>;
+    fetch(<?= json_encode($base . '/?action=api&page=admin/tools/theme-builder/api/fork_theme') ?>, {
+      method: 'POST',
+      body: new FormData(form)
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(result) {
+      if (!result.success) throw new Error(result.error || <?= json_encode(__('Fork creation failed.')) ?>);
+      window.location.href = <?= json_encode($selfUrl . '&theme=') ?> + encodeURIComponent(result.folder);
+    })
+    .catch(function(error) {
+      alert(error.message);
+      submit.disabled = false;
+      submit.textContent = <?= json_encode(__('Create Inactive Fork')) ?>;
+    });
+  });
+})();
+</script>
+<?php
+};
 
 if ($folder === ''):
     try {
@@ -29,7 +113,7 @@ if ($folder === ''):
   <div class="tb-header tb-header-row">
     <div>
       <h2><?= __('Installed Themes') ?></h2>
-      <p class="muted"><?= __('Read-only PHP source inventory for themes registered with Jyavani.') ?></p>
+      <p class="muted"><?= __('Inspect registered PHP source or create an inactive editable fork.') ?></p>
     </div>
     <a href="<?= h($dashUrl) ?>" class="btn btn-outline">&larr; <?= __('Theme Builder') ?></a>
   </div>
@@ -52,7 +136,10 @@ if ($folder === ''):
             <span class="tb-files"><?= (int)$theme['php_files'] ?> <?= __('PHP files') ?></span>
           </div>
           <?php if ($theme['inspectable']): ?>
-            <a class="btn btn-sm btn-primary" href="<?= h($selfUrl . '&theme=' . rawurlencode($theme['folder'])) ?>"><?= __('Inspect Source') ?></a>
+            <div class="tb-theme-actions">
+              <a class="btn btn-sm btn-primary" href="<?= h($selfUrl . '&theme=' . rawurlencode($theme['folder'])) ?>"><?= __('Inspect Source') ?></a>
+              <button type="button" class="btn btn-sm btn-outline" data-tb-fork data-source="<?= h($theme['folder']) ?>" data-name="<?= h($theme['name']) ?>"><?= __('Fork & Edit') ?></button>
+            </div>
           <?php else: ?>
             <p class="tb-inspector-error"><?= h((string)$theme['error']) ?></p>
             <button class="btn btn-sm btn-outline" disabled><?= __('Unavailable') ?></button>
@@ -61,6 +148,7 @@ if ($folder === ''):
       <?php endforeach; ?>
     </div>
   <?php endif; ?>
+  <?php $renderForkModal(); ?>
 </div>
 <?php
     return;
@@ -84,6 +172,14 @@ try {
 }
 
 $theme = $inspection['theme'];
+$forkState = $forkService->forkState($folder);
+$editable = (bool)$forkState['editable'];
+$sourceContent = is_string($source['source'] ?? null) ? $source['source'] : '';
+$hasCrLf = str_contains($sourceContent, "\r\n");
+$withoutCrLf = str_replace("\r\n", '', $sourceContent);
+$mixedLineEndings = str_contains($withoutCrLf, "\r") || ($hasCrLf && str_contains($withoutCrLf, "\n"));
+$lineSeparator = $hasCrLf && !$mixedLineEndings ? "\r\n" : "\n";
+$fileEditable = $editable && $source !== null && !empty($source['utf8']) && !$mixedLineEndings;
 $groupedFiles = [];
 foreach ($files as $file) $groupedFiles[$file['category_label']][] = $file;
 $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
@@ -116,12 +212,25 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
       <?php if ($theme['active']): ?><span class="tb-inspector-badge is-active"><?= __('Active') ?></span><?php endif; ?>
       <?php if ($theme['system']): ?><span class="tb-inspector-badge is-system"><?= __('System') ?></span><?php endif; ?>
       <?php if ($theme['store']): ?><span class="tb-inspector-badge is-store"><?= __('Store') ?></span><?php endif; ?>
+      <?php if ($forkState['managed']): ?><span class="tb-inspector-badge is-fork"><?= __('Managed Fork') ?></span><?php endif; ?>
+    </div>
+    <div class="tb-editor-actions">
+      <?php if ($fileEditable): ?><button type="button" id="tb-save-fork" class="btn btn-sm btn-primary"><?= __('Save PHP') ?></button><?php endif; ?>
+      <button type="button" class="btn btn-sm btn-outline" data-tb-fork data-source="<?= h($theme['folder']) ?>" data-name="<?= h($theme['name']) ?>"><?= __('Fork & Edit') ?></button>
     </div>
   </div>
 
-  <div class="tb-inspector-notice">
-    <strong><?= __('Read-only inspector.') ?></strong>
-    <?= __('Files are opened from the registered physical theme root. Source is escaped and is never executed.') ?>
+  <div class="tb-inspector-notice <?= $editable ? 'is-editable' : '' ?>">
+    <?php if ($fileEditable): ?>
+      <strong><?= __('Inactive managed fork.') ?></strong>
+      <?= __('Existing physical PHP files can be edited with stale-write protection, lint validation, atomic replacement, and a private pre-change revision.') ?>
+    <?php elseif ($editable): ?>
+      <strong><?= __('Current file is read-only.') ?></strong>
+      <?= __('Invalid UTF-8 or mixed line endings cannot be round-tripped safely in the browser editor.') ?>
+    <?php else: ?>
+      <strong><?= __('Read-only inspector.') ?></strong>
+      <?= h($forkState['managed'] ? __((string)$forkState['reason']) : __('Fork this theme before editing. Source is escaped and is never executed.')) ?>
+    <?php endif; ?>
   </div>
 
   <div class="tb-inspector-stats">
@@ -157,7 +266,7 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
         <?php if (!$source['utf8']): ?>
           <div class="tb-flash tb-flash-error"><?= __('This source is not valid UTF-8; invalid bytes are replaced for display.') ?></div>
         <?php endif; ?>
-        <textarea id="tb-installed-source" readonly><?= htmlspecialchars($source['source'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></textarea>
+        <textarea id="tb-installed-source" <?= $fileEditable ? '' : 'readonly' ?>></textarea>
       <?php else: ?>
         <div class="tb-inspector-empty"><?= __('This theme contains no PHP files.') ?></div>
       <?php endif; ?>
@@ -172,7 +281,7 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
           <dt><?= __('Modified') ?></dt><dd><?= h(date('Y-m-d H:i:s T', (int)$source['modified_at'])) ?></dd>
           <dt><?= __('Mode') ?></dt><dd><code><?= h($source['mode']) ?></code></dd>
           <dt><?= __('Owner') ?></dt><dd><?= h($source['owner'] . ':' . $source['group']) ?></dd>
-          <dt><?= __('Direct edit') ?></dt><dd><?= $source['writable'] ? __('Filesystem writable') : __('Filesystem read-only') ?></dd>
+          <dt><?= __('Editor state') ?></dt><dd><?= $fileEditable ? __('Editable inactive fork') : __('Read-only source') ?></dd>
         </dl>
         <h4>SHA-256</h4>
         <code class="tb-inspector-hash"><?= h($source['sha256']) ?></code>
@@ -208,25 +317,68 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
       <?php endforeach; ?>
     </div>
   </details>
+  <?php $renderForkModal(); ?>
 </div>
 
 <?php if ($source): ?>
 <script>
 (function() {
+  var encodedSource = <?= json_encode(base64_encode($sourceContent)) ?>;
+  var binarySource = atob(encodedSource);
+  var sourceBytes = new Uint8Array(binarySource.length);
+  for (var byteIndex = 0; byteIndex < binarySource.length; byteIndex++) sourceBytes[byteIndex] = binarySource.charCodeAt(byteIndex);
+  var initialSource = new TextDecoder('utf-8', { ignoreBOM: true }).decode(sourceBytes);
   var source = CodeMirror.fromTextArea(document.getElementById('tb-installed-source'), {
     mode: 'application/x-httpd-php',
     lineNumbers: true,
     lineWrapping: false,
-    readOnly: true,
-    cursorBlinkRate: -1,
+    readOnly: <?= $fileEditable ? 'false' : 'true' ?>,
+    cursorBlinkRate: <?= $fileEditable ? '530' : '-1' ?>,
+    lineSeparator: <?= json_encode($lineSeparator) ?>,
     viewportMargin: 40,
     foldGutter: true,
     gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter']
   });
+  source.setValue(initialSource);
   source.setSize('100%', 'calc(100vh - 310px)');
   var dark = document.documentElement.classList.contains('theme-dark')
     || !document.documentElement.classList.contains('theme-light');
   source.setOption('theme', dark ? 'dracula' : 'default');
+  <?php if ($fileEditable): ?>
+  var currentHash = <?= json_encode((string)$source['sha256']) ?>;
+  var saveButton = document.getElementById('tb-save-fork');
+  function saveForkSource() {
+    if (!saveButton || saveButton.disabled) return;
+    saveButton.disabled = true;
+    saveButton.textContent = <?= json_encode(__('Saving and linting...')) ?>;
+    var data = new FormData();
+    data.append('csrf_token', <?= json_encode($csrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>);
+    data.append('theme', <?= json_encode($folder) ?>);
+    data.append('file_id', <?= json_encode($fileId) ?>);
+    data.append('expected_hash', currentHash);
+    data.append('content', source.getValue());
+    fetch(<?= json_encode($base . '/?action=api&page=admin/tools/theme-builder/api/save_fork_file') ?>, { method: 'POST', body: data })
+    .then(function(response) { return response.json(); })
+    .then(function(result) {
+      if (!result.success) throw new Error(result.error || <?= json_encode(__('Save failed.')) ?>);
+      currentHash = result.sha256;
+      saveButton.textContent = <?= json_encode(__('Saved with revision')) ?>;
+      setTimeout(function() { saveButton.disabled = false; saveButton.textContent = <?= json_encode(__('Save PHP')) ?>; }, 1400);
+    })
+    .catch(function(error) {
+      alert(error.message);
+      saveButton.disabled = false;
+      saveButton.textContent = <?= json_encode(__('Save PHP')) ?>;
+    });
+  }
+  saveButton.addEventListener('click', saveForkSource);
+  document.addEventListener('keydown', function(event) {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+      event.preventDefault();
+      saveForkSource();
+    }
+  });
+  <?php endif; ?>
 })();
 </script>
 <?php endif; ?>
