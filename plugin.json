@@ -1,6 +1,6 @@
 {
   "name": "theme-builder",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "title": "Theme Builder",
   "description": "Site Owner theme source workspace with guarded PHP/CSS/JS editing and validated installable ZIP builds.",
   "author": "Adam Muiz",

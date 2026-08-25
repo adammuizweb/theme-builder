@@ -92,12 +92,18 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
 ?>
 <link rel="stylesheet" href="/static/vendor/codemirror/codemirror.min.css">
 <link rel="stylesheet" href="/static/vendor/codemirror/theme/dracula.min.css">
+<link rel="stylesheet" href="/static/vendor/codemirror/addon/fold/foldgutter.css">
 <script src="/static/vendor/codemirror/codemirror.min.js"></script>
 <script src="/static/vendor/codemirror/mode/xml/xml.min.js"></script>
 <script src="/static/vendor/codemirror/mode/javascript/javascript.min.js"></script>
 <script src="/static/vendor/codemirror/mode/htmlmixed/htmlmixed.min.js"></script>
 <script src="/static/vendor/codemirror/mode/clike/clike.min.js"></script>
 <script src="/static/vendor/codemirror/mode/php/php.min.js"></script>
+<script src="/static/vendor/codemirror/addon/fold/foldcode.js"></script>
+<script src="/static/vendor/codemirror/addon/fold/foldgutter.js"></script>
+<script src="/static/vendor/codemirror/addon/fold/brace-fold.js"></script>
+<script src="/static/vendor/codemirror/addon/fold/xml-fold.js"></script>
+<script src="/static/vendor/codemirror/addon/fold/comment-fold.js"></script>
 
 <div class="tb-installed">
   <div class="tb-editor-topbar tb-installed-topbar">
@@ -213,7 +219,9 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
     lineWrapping: false,
     readOnly: true,
     cursorBlinkRate: -1,
-    viewportMargin: 40
+    viewportMargin: 40,
+    foldGutter: true,
+    gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter']
   });
   source.setSize('100%', 'calc(100vh - 310px)');
   var dark = document.documentElement.classList.contains('theme-dark')

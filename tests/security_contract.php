@@ -41,12 +41,15 @@ foreach (($manifest['admin']['nav'] ?? []) as $item) {
 $dashboard = (string)file_get_contents($root . '/admin/index.php');
 $editor = (string)file_get_contents($root . '/admin/editor.php');
 $installed = (string)file_get_contents($root . '/admin/installed.php');
+$builderCss = (string)file_get_contents($root . '/assets/css/builder.css');
 $check(str_contains($dashboard, 'adiwira_require_site_owner($pdo, false)'), 'Theme Builder dashboard requires Site Owner');
 $check(str_contains($editor, 'adiwira_require_site_owner($pdo, false)'), 'Theme Builder editor requires Site Owner');
 $check(str_contains($installed, 'adiwira_require_site_owner($pdo, false)'), 'installed theme inspector requires Site Owner');
 $check(!str_contains($dashboard, 'plugin.theme-builder.') && !str_contains($editor, 'plugin.theme-builder.') && !str_contains($installed, 'plugin.theme-builder.'), 'Theme Builder UI has no delegated permission path');
 $check(!str_contains($installed, '$_POST') && !str_contains($installed, "method: 'POST'") && !str_contains($installed, 'csrf_token'), 'installed theme inspector exposes no mutation path');
 $check(str_contains($installed, 'readOnly: true') && str_contains($installed, "htmlspecialchars(\$source['source'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')"), 'installed PHP source is escaped into read-only CodeMirror');
+$check(str_contains($installed, 'addon/fold/foldgutter.js') && str_contains($installed, 'addon/fold/brace-fold.js') && str_contains($installed, 'addon/fold/xml-fold.js') && str_contains($installed, 'foldGutter: true'), 'installed source viewer restores Core CodeMirror folding after loading its local instance');
+$check(str_contains($builderCss, '.tb-dashboard .btn-primary:hover') && str_contains($builderCss, 'var(--adam-primary-gradient-hover') && str_contains($builderCss, 'color:#fff'), 'Theme Builder primary hover retains high-contrast text and uses the dashboard hover gradient');
 $check(!preg_match('/\b(?:include|require|eval)\s*\(?(?:\$source|\$file)/', $installed), 'installed PHP source is never executed by the inspector UI');
 $check(str_contains($dashboard, 'name="csrf_token"') && str_contains($dashboard, 'json_encode($csrfToken'), 'dashboard exposes CSRF through its form and safe JavaScript serialization');
 $check(substr_count($dashboard, "method: 'POST'") === 4, 'all dashboard mutations use POST');
