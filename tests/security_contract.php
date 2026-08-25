@@ -20,7 +20,7 @@ try {
 }
 
 $check(($manifest['name'] ?? null) === 'theme-builder', 'manifest identity is theme-builder');
-$check(($manifest['version'] ?? null) === '1.5.0' && ($manifest['requires']['jyavani'] ?? null) === '>=2.3.87', 'manifest is the 1.5.0 candidate for the generic Core contract');
+$check(($manifest['version'] ?? null) === '1.6.0' && ($manifest['requires']['jyavani'] ?? null) === '>=2.3.87', 'manifest is the 1.6.0 candidate for the generic Core contract');
 $check(in_array('tokenizer', $manifest['requires']['extensions'] ?? [], true), 'manifest declares the dependency-parser tokenizer extension');
 $check(!array_key_exists('permissions', $manifest), 'manifest declares no delegable Theme Builder permissions');
 $pages = $manifest['admin']['pages'] ?? [];
@@ -71,6 +71,7 @@ $integrationSource = (string)file_get_contents($root . '/includes/class-theme-bu
 $preview = (string)file_get_contents($root . '/admin/api/preview.php');
 $check(!str_contains($bootstrap, 'class-preview-renderer.php') && !is_file($root . '/includes/class-preview-renderer.php'), 'plugin package contains no in-process PHP preview renderer');
 $check(str_contains($bootstrap, 'class-theme-fork-service.php'), 'plugin bootstrap loads the managed fork service');
+$check(str_contains($bootstrap, 'class-theme-owner-navigator.php'), 'plugin bootstrap loads the read-only owner workspace navigator');
 $check(str_contains($bootstrap, 'class-theme-builder-core-integration.php') && str_contains($bootstrap, 'ThemeBuilderCoreIntegration::register')
     && str_contains($bootstrap, "function_exists('add_action')") && str_contains($bootstrap, "function_exists('add_filter')"),
     'plugin bootstrap conditionally registers the generic Core integration');
@@ -154,6 +155,7 @@ $check(str_contains($saveFile, "POST['expected_hash']") && str_contains($saveMan
 $check(str_contains($download, 'ThemeWorkspace::openArtifact') && str_contains($download, 'fpassthru') && !str_contains($download, "preg_replace('/[^a-zA-Z0-9_-]/'"), 'ZIP download streams a validated immutable descriptor and rejects malformed slugs');
 $workspaceSource = (string)file_get_contents($root . '/includes/class-theme-workspace.php');
 $inspectorSource = (string)file_get_contents($root . '/includes/class-installed-theme-inspector.php');
+$ownerNavigatorSource = (string)file_get_contents($root . '/includes/class-theme-owner-navigator.php');
 $forkServiceSource = (string)file_get_contents($root . '/includes/class-theme-fork-service.php');
 $check(str_contains($workspaceSource, 'phpCliBinary()') && str_contains($workspaceSource, 'PHP_VERSION_ID ===') && !str_contains($workspaceSource, "proc_open([PHP_BINARY"), 'PHP lint resolves a CLI binary matching the PHP-FPM runtime version');
 $check(str_contains($workspaceSource, 'acquireThemeLock($slug)') && str_contains($workspaceSource, 'zipHashes($temporary)'), 'save, delete, and package operations share a theme lock and verify archive bytes');
@@ -165,6 +167,17 @@ $check(str_contains($inspectorSource, 'SELECT * FROM themes WHERE folder_name = 
     'source lookups require exact case-sensitive registered theme identity and opaque file ID');
 $check(str_contains($inspectorSource, 'is_link($path)') && str_contains($inspectorSource, 'fstat($handle)') && str_contains($inspectorSource, 'realpath($path)'), 'inspector rejects symlinks and verifies regular-file descriptors inside the theme root');
 $check(!str_contains($inspectorSource, "defined('ABSPATH')") && !str_contains($inspectorSource, 'CATCH_GET_CHILD'), 'inspector bootstrap is Jyavani-native and unreadable subtrees fail closed');
+$check(str_contains($ownerNavigatorSource, 'plugin_resolve_route')
+    && str_contains($ownerNavigatorSource, 'plugin_route_is_allowed')
+    && str_contains($ownerNavigatorSource, "current_user_can(\$this->pdo, 'core.theme_content.update'")
+    && !str_contains($ownerNavigatorSource, 'FROM jvb_layouts')
+    && !str_contains($ownerNavigatorSource, 'FROM post_translations'),
+    'owner navigation checks active authorized routes and uses plugin APIs instead of plugin storage');
+$check(str_contains($ownerNavigatorSource, 'OCTET_LENGTH(content) <= 2097152')
+    && str_contains($ownerNavigatorSource, 'CONTENT_BATCH_SIZE = 10')
+    && str_contains($ownerNavigatorSource, 'MAX_TRANSLATION_LOCALES = 20')
+    && str_contains($inspectorSource, 'MAX_DEPENDENCY_TOTAL_BYTES = 16777216'),
+    'owner inventory bounds buffered content, locale expansion, and aggregate dependency tokenization');
 $check(str_contains($inspectorSource, 'strlen($folder) > 128') && str_contains($forkServiceSource, 'strlen($folder) <= 128')
     && str_contains($integrationSource, 'strlen($folder) <= 128'),
     'inspector, source service, and Core integration share the exact 128-byte Core folder grammar');

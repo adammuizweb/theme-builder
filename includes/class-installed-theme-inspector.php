@@ -6,6 +6,7 @@ final class InstalledThemeInspector
     private const MAX_PHP_FILES = 1000;
     private const MAX_SOURCE_BYTES = 5242880;
     private const MAX_DEPENDENCY_SCAN_BYTES = 262144;
+    private const MAX_DEPENDENCY_TOTAL_BYTES = 16777216;
 
     private PDO $pdo;
 
@@ -101,6 +102,52 @@ final class InstalledThemeInspector
         }
 
         return null;
+    }
+
+    public function literalDependencies(string $folder, array $fileIds): array
+    {
+        if (count($fileIds) > self::MAX_PHP_FILES) throw new InvalidArgumentException('Too many source files requested.');
+        $this->registeredTheme($folder);
+        $root = $this->themeRoot($folder);
+        $files = $this->inventory($root, $folder);
+        $byPath = [];
+        $byId = [];
+        foreach ($files as $index => $file) {
+            $byPath[$file['path']] = $index;
+            $byId[$file['id']] = $file;
+        }
+
+        $requested = [];
+        foreach ($fileIds as $fileId) {
+            if (!is_string($fileId) || preg_match('/\A[a-f0-9]{64}\z/D', $fileId) !== 1) {
+                throw new InvalidArgumentException('Invalid source file identity.');
+            }
+            $requested[$fileId] = true;
+        }
+
+        $result = [];
+        $scannedBytes = 0;
+        foreach (array_keys($requested) as $fileId) {
+            $file = $byId[$fileId] ?? null;
+            if (!is_array($file)) continue;
+            $size = (int)$file['size'];
+            $reason = null;
+            if ($size > self::MAX_DEPENDENCY_SCAN_BYTES) {
+                $reason = 'file_limit';
+            } elseif ($scannedBytes + $size > self::MAX_DEPENDENCY_TOTAL_BYTES) {
+                $reason = 'aggregate_limit';
+            }
+            $scanned = $reason === null;
+            $dependencies = [];
+            if ($scanned) {
+                $path = $root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, (string)$file['path']);
+                $state = $this->readRegularFile($path, $root, self::MAX_DEPENDENCY_SCAN_BYTES);
+                $scannedBytes += strlen($state['content']);
+                $dependencies = $this->dependencies($state['content'], (string)$file['path'], $files, $byPath);
+            }
+            $result[$fileId] = ['scanned' => $scanned, 'reason' => $reason, 'dependencies' => $dependencies];
+        }
+        return $result;
     }
 
     private function registeredTheme(string $folder): array

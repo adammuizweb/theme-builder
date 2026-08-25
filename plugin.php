@@ -6,6 +6,7 @@ $__tb_dir = __DIR__;
 
 require_once $__tb_dir . '/includes/class-theme-workspace.php';
 require_once $__tb_dir . '/includes/class-installed-theme-inspector.php';
+require_once $__tb_dir . '/includes/class-theme-owner-navigator.php';
 require_once $__tb_dir . '/includes/class-theme-fork-service.php';
 require_once $__tb_dir . '/includes/class-theme-builder-core-integration.php';
 require_once $__tb_dir . '/includes/class-var-reference.php';

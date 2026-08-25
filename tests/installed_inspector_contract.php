@@ -122,6 +122,13 @@ try {
     $wrapper = $inspector->source('apu', (string)$byPath['partials/shortcodes/section/hero.php']['id']);
     $wrapperDependencies = $wrapper['dependencies'] ?? [];
     $check(($wrapper['dependencies_scanned'] ?? false) === true && count($wrapperDependencies) === 1 && ($wrapperDependencies[0]['path'] ?? null) === 'main/sections/hero.php', 'token-aware literal __DIR__ dependency ignores comments and resolves uppercase require');
+    $dependencyMap = $inspector->literalDependencies('apu', [
+        (string)$byPath['partials/shortcodes/section/hero.php']['id'],
+        (string)$byPath['large.php']['id'],
+    ]);
+    $check(($dependencyMap[$byPath['partials/shortcodes/section/hero.php']['id']]['dependencies'][0]['path'] ?? null) === 'main/sections/hero.php'
+        && ($dependencyMap[$byPath['large.php']['id']]['scanned'] ?? true) === false,
+        'batch literal dependency inventory traverses once and skips oversized source bytes');
     $large = $inspector->source('apu', (string)$byPath['large.php']['id']);
     $check(($large['dependencies_scanned'] ?? true) === false && ($large['dependencies'] ?? null) === [], 'large source remains readable while dependency tokenization is skipped');
 
@@ -169,6 +176,19 @@ try {
         try { $inspector->inspect($invalidCoreFolder); } catch (InvalidArgumentException) { $rejected = true; }
         $check($rejected, 'installed inspector rejects non-Core folder identity: ' . strlen($invalidCoreFolder));
     }
+
+    $budgetIds = [];
+    for ($index = 0; $index < 65; $index++) {
+        $path = 'apu/partials/shortcodes/section/budget-' . $index . '.php';
+        $write($path, "<?php\n/*" . str_repeat('x', 262000) . "*/\n");
+    }
+    $budgetInspection = $inspector->inspect('apu');
+    foreach ($budgetInspection['files'] as $file) {
+        if (str_starts_with((string)$file['path'], 'partials/shortcodes/section/budget-')) $budgetIds[] = $file['id'];
+    }
+    $budgetDependencies = $inspector->literalDependencies('apu', $budgetIds);
+    $budgetSkipped = array_filter($budgetDependencies, static fn(array $state): bool => ($state['reason'] ?? null) === 'aggregate_limit');
+    $check($budgetSkipped !== [], 'batch literal dependency inventory enforces its 16 MiB aggregate tokenization budget');
 
     foreach ($beforeHashes as $path => $hash) {
         $check(hash_file('sha256', $themesRoot . '/apu/' . $path) === $hash, 'inspection does not mutate ' . $path);

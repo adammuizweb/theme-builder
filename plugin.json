@@ -1,8 +1,8 @@
 {
   "name": "theme-builder",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "title": "Theme Builder",
-  "description": "Site Owner PHP theme source workspace with verified forks, guarded editing, durable revisions, private source exports, and explicit Core update decisions.",
+  "description": "Site Owner PHP theme source workspace with guarded editing, durable revisions, explicit Core update decisions, and read-only navigation to owner workspaces.",
   "author": "Adam Muiz",
   "author_uri": "https://jyavani.com/member/adammuiz/",
   "plugin_uri": "https://jyavani.com/plugin/theme-builder/",
@@ -157,7 +157,7 @@
     ]
   },
   "assets": {
-    "css": ["/static/plugins/theme-builder/theme-builder.css?v=1.5.0"],
+    "css": ["/static/plugins/theme-builder/theme-builder.css?v=1.6.0"],
     "js": []
   }
 }

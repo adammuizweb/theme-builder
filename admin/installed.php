@@ -216,6 +216,7 @@ try {
 }
 
 $theme = $inspection['theme'];
+$relationships = (new ThemeOwnerNavigator($pdo))->relationships($folder, $inspection, $base);
 $forkState = $forkService->forkState($folder);
 $directState = $forkService->directEditState($folder);
 $dirtyState = $forkService->dirtyState($folder);
@@ -308,6 +309,88 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
     <div><strong><?= count(array_filter($inspection['slots'], static fn(array $slot): bool => $slot['status'] === 'physical')) ?></strong><span><?= __('Physical Slots') ?></span></div>
     <div><strong><?= count(array_filter($inspection['slots'], static fn(array $slot): bool => $slot['status'] === 'inherited')) ?></strong><span><?= __('Fallback Slots') ?></span></div>
   </div>
+
+  <section class="tb-owner-map" aria-labelledby="tb-owner-map-title">
+    <div class="tb-owner-map-heading">
+      <div>
+        <h4 id="tb-owner-map-title"><?= __('Owner Workspaces') ?></h4>
+        <p><?= __('Theme Builder inventories these relationships for navigation only. Content and layouts remain stored and edited by Core or their owning plugin.') ?></p>
+      </div>
+      <?php if (!$theme['active']): ?><span class="tb-inspector-badge is-system"><?= __('Inactive Theme') ?></span><?php endif; ?>
+    </div>
+    <div class="tb-owner-map-grid">
+      <article class="tb-owner-card">
+        <header>
+          <div><span><?= __('Core-owned data') ?></span><h5><?= __('Theme Templates') ?></h5></div>
+          <strong><?= count($relationships['templates']['items']) ?></strong>
+        </header>
+        <?php if ($relationships['templates']['error'] !== null): ?>
+          <p class="tb-owner-empty"><?= h(__((string)$relationships['templates']['error'])) ?></p>
+        <?php elseif ($relationships['templates']['items'] === []): ?>
+          <p class="tb-owner-empty"><?= __('No database Theme Templates were found.') ?></p>
+        <?php else: ?>
+          <div class="tb-owner-list">
+            <?php foreach ($relationships['templates']['items'] as $template): ?>
+              <div class="tb-owner-item">
+                <div class="tb-owner-item-title">
+                  <strong><?= h($template['title'] !== '' ? $template['title'] : '#' . $template['id']) ?></strong>
+                  <code><?= h($template['slug']) ?></code>
+                </div>
+                <div class="tb-owner-meta">
+                  <span><?= h(__(ucfirst($template['status']))) ?></span>
+                  <span><?= $template['slots'] ? h(implode(', ', $template['slots'])) : h(__('Unassigned')) ?></span>
+                  <?php if ($template['builder'] !== null): ?><span><?= __('Jy Builder') ?>: <?= h(__(ucfirst($template['builder']['status']))) ?></span><?php endif; ?>
+                </div>
+                <div class="tb-owner-actions">
+                  <?php if ($template['core_url'] !== null): ?><a class="btn btn-sm btn-outline" href="<?= h($template['core_url']) ?>"><?= __('Edit in Core') ?></a><?php endif; ?>
+                  <?php if ($template['builder'] !== null): ?><a class="btn btn-sm btn-outline" href="<?= h($template['builder']['url']) ?>"><?= __('Open Jy Builder') ?></a><?php endif; ?>
+                  <?php foreach ($template['translations'] as $translation): ?>
+                    <a class="btn btn-sm btn-outline" href="<?= h($translation['url']) ?>"><?= h(sprintf(__('Translate %s'), strtoupper($translation['locale']))) ?></a>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+            <?php endforeach; ?>
+          </div>
+          <?php if ($relationships['templates']['truncated']): ?><p class="tb-owner-note"><?= __('Showing the first 200 Theme Templates.') ?></p><?php endif; ?>
+          <?php if ($relationships['templates']['translation_locales_truncated']): ?><p class="tb-owner-note"><?= __('Showing Content Translation links for the first 20 valid locales.') ?></p><?php endif; ?>
+          <?php if (!$theme['active']): ?><p class="tb-owner-note"><?= __('Content Translation package links are shown only for the active physical theme that owns the current Theme Section source.') ?></p><?php endif; ?>
+        <?php endif; ?>
+      </article>
+
+      <article class="tb-owner-card">
+        <header>
+          <div><span><?= __('Physical PHP source') ?></span><h5><?= __('Theme Sections') ?></h5></div>
+          <strong><?= count($relationships['sections']['items']) ?></strong>
+        </header>
+        <?php if ($relationships['sections']['items'] === []): ?>
+          <p class="tb-owner-empty"><?= __('No registered Theme Section wrappers were found in this theme.') ?></p>
+        <?php else: ?>
+          <div class="tb-owner-list">
+            <?php foreach ($relationships['sections']['items'] as $section): ?>
+              <div class="tb-owner-item">
+                <div class="tb-owner-item-title"><a href="<?= h($section['url']) ?>"><strong><?= h(basename($section['path'], '.php')) ?></strong></a><code><?= h($section['path']) ?></code></div>
+                <?php if ($section['error'] !== null): ?>
+                  <p class="tb-owner-note"><?= h(__((string)$section['error'])) ?></p>
+                <?php elseif ($section['scan_reason'] === 'aggregate_limit'): ?>
+                  <p class="tb-owner-note"><?= __('Dependency scan skipped after the 16 MiB page inventory budget was reached.') ?></p>
+                <?php elseif (!$section['scanned']): ?>
+                  <p class="tb-owner-note"><?= __('Dependency scan skipped because this wrapper exceeds 256 KiB.') ?></p>
+                <?php elseif ($section['dependencies'] === []): ?>
+                  <p class="tb-owner-note"><?= __('No local literal leaf dependency detected.') ?></p>
+                <?php else: ?>
+                  <div class="tb-owner-dependencies">
+                    <?php foreach ($section['dependencies'] as $dependency): ?>
+                      <a href="<?= h($dependency['url']) ?>"><span><?= h($dependency['path']) ?></span><small><?= h($dependency['category']) ?></small></a>
+                    <?php endforeach; ?>
+                  </div>
+                <?php endif; ?>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+      </article>
+    </div>
+  </section>
 
   <div class="tb-inspector-main">
     <aside class="tb-inspector-files" aria-label="<?= h(__('PHP source inventory')) ?>">

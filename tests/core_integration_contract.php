@@ -72,7 +72,7 @@ register_shutdown_function(static function () use ($root, $remove): void { $remo
 try {
     $pluginManifest = json_decode((string)file_get_contents(dirname(__DIR__) . '/plugin.json'), true, 32, JSON_THROW_ON_ERROR);
     $check(($pluginManifest['requires']['jyavani'] ?? null) === '>=2.3.87',
-        'Phase 4 declares the Core 2.3.87 generic lifecycle and update contract floor');
+        'Theme Builder declares the Core 2.3.87 generic lifecycle and update contract floor');
     $hooks = $GLOBALS['_tb_hooks'];
     $check(count($hooks) === 5 && array_column($hooks, 1) === [
         'theme_manager_theme_actions', 'theme_update_preflight', 'theme_update_completed', 'theme_install_completed',
