@@ -1,17 +1,17 @@
 {
   "name": "theme-builder",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "title": "Theme Builder",
-  "description": "Visual theme builder — create themes with HTML/CSS/JS, edit slot templates with variable reference, live preview, build installable ZIP.",
+  "description": "Site Owner theme source workspace with guarded PHP/CSS/JS editing and validated installable ZIP builds.",
   "author": "Adam Muiz",
   "author_uri": "https://jyavani.com/member/adammuiz/",
   "plugin_uri": "https://jyavani.com/plugin/theme-builder/",
   "homepage": "https://jyavani.com/plugin/theme-builder/",
   "icon": "icon.png",
   "requires": {
-    "jyavani": ">=2.3.72",
+    "jyavani": ">=2.3.85",
     "php": ">=8.1",
-    "extensions": ["pdo", "json", "zip", "mbstring"]
+    "extensions": ["pdo", "json", "zip", "mbstring", "tokenizer"]
   },
   "admin": {
     "pages": [
@@ -26,6 +26,14 @@
         "route": "admin/tools/theme-builder/editor",
         "file": "admin/editor.php",
         "title": "Theme Editor",
+        "hidden": true,
+        "site_owner": true,
+        "roles": ["admin"]
+      },
+      {
+        "route": "admin/tools/theme-builder/installed",
+        "file": "admin/installed.php",
+        "title": "Installed Themes",
         "hidden": true,
         "site_owner": true,
         "roles": ["admin"]

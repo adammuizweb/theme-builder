@@ -20,10 +20,11 @@ try {
 }
 
 $check(($manifest['name'] ?? null) === 'theme-builder', 'manifest identity is theme-builder');
-$check(($manifest['requires']['jyavani'] ?? null) === '>=2.3.72', 'manifest declares the Site Owner-capable Core minimum');
+$check(($manifest['requires']['jyavani'] ?? null) === '>=2.3.85', 'manifest requires the hardened Core theme installer');
+$check(in_array('tokenizer', $manifest['requires']['extensions'] ?? [], true), 'manifest declares the dependency-parser tokenizer extension');
 $check(!array_key_exists('permissions', $manifest), 'manifest declares no delegable Theme Builder permissions');
 $pages = $manifest['admin']['pages'] ?? [];
-$check(is_array($pages) && count($pages) === 10, 'manifest declares all ten Theme Builder routes');
+$check(is_array($pages) && count($pages) === 11, 'manifest declares all eleven Theme Builder routes');
 foreach (is_array($pages) ? $pages : [] as $page) {
     $route = (string)($page['route'] ?? 'unknown');
     $check(($page['site_owner'] ?? false) === true, "{$route} is declared Site Owner-only");
@@ -39,9 +40,14 @@ foreach (($manifest['admin']['nav'] ?? []) as $item) {
 
 $dashboard = (string)file_get_contents($root . '/admin/index.php');
 $editor = (string)file_get_contents($root . '/admin/editor.php');
+$installed = (string)file_get_contents($root . '/admin/installed.php');
 $check(str_contains($dashboard, 'adiwira_require_site_owner($pdo, false)'), 'Theme Builder dashboard requires Site Owner');
 $check(str_contains($editor, 'adiwira_require_site_owner($pdo, false)'), 'Theme Builder editor requires Site Owner');
-$check(!str_contains($dashboard, 'plugin.theme-builder.') && !str_contains($editor, 'plugin.theme-builder.'), 'Theme Builder UI has no delegated permission path');
+$check(str_contains($installed, 'adiwira_require_site_owner($pdo, false)'), 'installed theme inspector requires Site Owner');
+$check(!str_contains($dashboard, 'plugin.theme-builder.') && !str_contains($editor, 'plugin.theme-builder.') && !str_contains($installed, 'plugin.theme-builder.'), 'Theme Builder UI has no delegated permission path');
+$check(!str_contains($installed, '$_POST') && !str_contains($installed, "method: 'POST'") && !str_contains($installed, 'csrf_token'), 'installed theme inspector exposes no mutation path');
+$check(str_contains($installed, 'readOnly: true') && str_contains($installed, "htmlspecialchars(\$source['source'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')"), 'installed PHP source is escaped into read-only CodeMirror');
+$check(!preg_match('/\b(?:include|require|eval)\s*\(?(?:\$source|\$file)/', $installed), 'installed PHP source is never executed by the inspector UI');
 $check(str_contains($dashboard, 'name="csrf_token"') && str_contains($dashboard, 'json_encode($csrfToken'), 'dashboard exposes CSRF through its form and safe JavaScript serialization');
 $check(substr_count($dashboard, "method: 'POST'") === 4, 'all dashboard mutations use POST');
 $check(substr_count($dashboard, "fd.append('csrf_token', csrfToken)") === 3, 'build, install, and delete send CSRF explicitly');
@@ -49,7 +55,14 @@ $check(!str_contains($dashboard, 'api/build_zip&theme=') && !str_contains($dashb
 $check(str_contains($dashboard, 'a.href = data.download_url'), 'successful builds retain a read-only ZIP download');
 $check(str_contains($editor, 'json_encode($csrfToken'), 'editor serializes its CSRF token safely');
 $check(substr_count($editor, "fd.append('csrf_token', csrfToken)") === 3, 'slot, manifest, and asset writes send CSRF');
+$check(substr_count($editor, "fd.append('expected_hash'") === 3, 'slot, manifest, and asset writes send an optimistic source hash');
+$check(!str_contains($editor, 'allow-same-origin') && !str_contains($editor, 'tb-preview-frame'), 'editor does not expose an authenticated same-origin PHP preview iframe');
 $check(!str_contains($editor, 'preview&theme=') || !str_contains($editor, 'preview&theme=' . "' + encodeURIComponent(slug) + '&csrf_token="), 'preview URLs do not expose CSRF tokens');
+
+$bootstrap = (string)file_get_contents($root . '/plugin.php');
+$preview = (string)file_get_contents($root . '/admin/api/preview.php');
+$check(!str_contains($bootstrap, 'class-preview-renderer.php') && !is_file($root . '/includes/class-preview-renderer.php'), 'plugin package contains no in-process PHP preview renderer');
+$check(str_contains($preview, "http_response_code(501)") && !str_contains($preview, 'PreviewRenderer::'), 'preview endpoint refuses PHP execution');
 
 $mutations = [
     'create_theme.php' => 'ThemeWorkspace::createTheme',
@@ -74,6 +87,25 @@ foreach (['build_zip.php', 'install_theme.php', 'delete_theme.php'] as $file) {
     $source = (string)file_get_contents($root . '/admin/api/' . $file);
     $check(!str_contains($source, "GET['theme']"), "{$file} no longer accepts a GET theme parameter");
 }
+
+foreach (['create_theme.php', 'save_file.php', 'save_manifest.php', 'build_zip.php', 'install_theme.php', 'delete_theme.php'] as $file) {
+    $source = (string)file_get_contents($root . '/admin/api/' . $file);
+    $check(str_contains($source, 'ThemeWorkspace::isValidSlug'), "{$file} rejects malformed slugs instead of sanitizing them");
+}
+
+$saveFile = (string)file_get_contents($root . '/admin/api/save_file.php');
+$saveManifest = (string)file_get_contents($root . '/admin/api/save_manifest.php');
+$download = (string)file_get_contents($root . '/admin/api/download_zip.php');
+$check(str_contains($saveFile, "POST['expected_hash']") && str_contains($saveManifest, "POST['expected_hash']"), 'source mutation APIs require an original SHA-256');
+$check(str_contains($download, 'ThemeWorkspace::openArtifact') && str_contains($download, 'fpassthru') && !str_contains($download, "preg_replace('/[^a-zA-Z0-9_-]/'"), 'ZIP download streams a validated immutable descriptor and rejects malformed slugs');
+$workspaceSource = (string)file_get_contents($root . '/includes/class-theme-workspace.php');
+$inspectorSource = (string)file_get_contents($root . '/includes/class-installed-theme-inspector.php');
+$check(str_contains($workspaceSource, 'phpCliBinary()') && str_contains($workspaceSource, 'PHP_VERSION_ID ===') && !str_contains($workspaceSource, "proc_open([PHP_BINARY"), 'PHP lint resolves a CLI binary matching the PHP-FPM runtime version');
+$check(str_contains($workspaceSource, 'acquireThemeLock($slug)') && str_contains($workspaceSource, 'zipHashes($temporary)'), 'save, delete, and package operations share a theme lock and verify archive bytes');
+$check(str_contains($workspaceSource, 'openRegularFileState($zip, true)') && str_contains($workspaceSource, 'createPrivateInstallStage($slug)') && str_contains($workspaceSource, '($mode & 01000)') && str_contains($workspaceSource, "\$stage = \$stageDir . '/package.zip'"), 'download and installation consume descriptor-verified bytes through sticky-parent private staging');
+$check(str_contains($inspectorSource, 'SELECT * FROM themes WHERE folder_name = ? LIMIT 1') && str_contains($inspectorSource, 'hash_equals((string)$file[\'id\'], $fileId)'), 'inspector binds source lookup to a registered theme and opaque file ID');
+$check(str_contains($inspectorSource, 'is_link($path)') && str_contains($inspectorSource, 'fstat($handle)') && str_contains($inspectorSource, 'realpath($path)'), 'inspector rejects symlinks and verifies regular-file descriptors inside the theme root');
+$check(!str_contains($inspectorSource, "defined('ABSPATH')") && !str_contains($inspectorSource, 'CATCH_GET_CHILD'), 'inspector bootstrap is Jyavani-native and unreadable subtrees fail closed');
 
 $build = (string)file_get_contents($root . '/admin/api/build_zip.php');
 $check(str_contains($build, '?action=api&page=admin/tools/theme-builder/api/download_zip&theme='), 'build response uses the pre-layout API download route');

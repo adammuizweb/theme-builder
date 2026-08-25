@@ -10,4 +10,5 @@ $author = trim((string)($_POST['author'] ?? ''));
 $description = trim((string)($_POST['description'] ?? ''));
 $colorMode = trim((string)($_POST['color_mode'] ?? 'both'));
 if ($slug === '' || $name === '') adiwira_json(['error' => 'Slug and name required.'], 400);
+if (!ThemeWorkspace::isValidSlug($slug)) adiwira_json(['error' => 'Use a lowercase slug containing only letters, numbers, hyphens, and underscores.'], 400);
 adiwira_json(ThemeWorkspace::createTheme($slug, $name, $author, $description, $colorMode));

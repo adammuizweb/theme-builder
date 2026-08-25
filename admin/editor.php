@@ -4,7 +4,7 @@ declare(strict_types=1);
 // Theme Builder — Editor
 
 if (!function_exists('h')) {
-    function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
+    function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 }
 
 $pdo = $GLOBALS['pdo'] ?? null;
@@ -18,19 +18,33 @@ $selfUrl = $base . '/?page=admin/tools/theme-builder/editor';
 
 $slug = trim((string)($_GET['theme'] ?? ''));
 if ($slug === '') { echo '<p>No theme. <a href="' . h($dashUrl) . '">Back</a></p>'; return; }
+if (!ThemeWorkspace::isValidSlug($slug)) { echo '<p>Invalid theme. <a href="' . h($dashUrl) . '">Back</a></p>'; return; }
 
 $themeDir = ThemeWorkspace::themeDir($slug);
 if (!is_dir($themeDir)) { echo '<p>Theme not found. <a href="' . h($dashUrl) . '">Back</a></p>'; return; }
 
-$manifest = ThemeWorkspace::readManifest($slug);
+$manifestState = ThemeWorkspace::readManifestState($slug);
+$manifest = is_array($manifestState['manifest'] ?? null) ? $manifestState['manifest'] : [];
 $completion = ThemeWorkspace::completionStatus($themeDir);
 $slotLabels = ThemeWorkspace::slotLabels();
 $slotFiles = ThemeWorkspace::slotFiles();
 
 $currentSlot = trim((string)($_GET['slot'] ?? 'header'));
 if (!isset($slotFiles[$currentSlot])) $currentSlot = 'header';
-$currentContent = ThemeWorkspace::readFile($slug, $currentSlot) ?? '';
+$currentState = ThemeWorkspace::readFileState($slug, $currentSlot);
+$currentContent = is_string($currentState['content'] ?? null) ? $currentState['content'] : '';
 $currentFile = $slotFiles[$currentSlot] ?? '';
+$currentHash = is_string($currentState['sha256'] ?? null) ? $currentState['sha256'] : '';
+$manifestHash = is_string($manifestState['sha256'] ?? null) ? $manifestState['sha256'] : '';
+$assetLines = static function (mixed $entries): string {
+    if (!is_array($entries)) return '';
+    $sources = [];
+    foreach ($entries as $entry) {
+        $source = is_string($entry) ? $entry : (is_array($entry) && is_string($entry['src'] ?? null) ? $entry['src'] : null);
+        if (is_string($source)) $sources[] = $source;
+    }
+    return implode("\n", $sources);
+};
 ?>
 
 <link rel="stylesheet" href="/static/vendor/codemirror/codemirror.min.css">
@@ -40,6 +54,8 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
 <script src="/static/vendor/codemirror/mode/xml/xml.min.js"></script>
 <script src="/static/vendor/codemirror/mode/javascript/javascript.min.js"></script>
 <script src="/static/vendor/codemirror/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="/static/vendor/codemirror/mode/clike/clike.min.js"></script>
+<script src="/static/vendor/codemirror/mode/php/php.min.js"></script>
 <script src="/static/vendor/codemirror/mode/css/css.min.js"></script>
 <script src="/static/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
 <script src="/static/vendor/codemirror/addon/edit/closetag.min.js"></script>
@@ -56,7 +72,7 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
     <h3><?= h($manifest['name'] ?? $slug) ?> <span class="tb-version">v<?= h($manifest['version'] ?? '0.1.0') ?></span></h3>
     <div class="tb-editor-actions">
       <button id="tb-btn-save" class="btn btn-sm btn-primary"><?= __('Save') ?></button>
-      <button id="tb-btn-preview" class="btn btn-sm btn-outline"><?= __('Preview') ?></button>
+      <button class="btn btn-sm btn-outline" disabled title="<?= __('PHP preview is disabled until an isolated preview runtime is available.') ?>"><?= __('Preview unavailable') ?></button>
       <button id="tb-btn-manifest" class="btn btn-sm btn-outline"><?= __('theme.json') ?></button>
       <button id="tb-btn-assets" class="btn btn-sm btn-outline"><?= __('CSS/JS') ?></button>
     </div>
@@ -106,26 +122,6 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
     <button class="tb-restore-btn tb-restore-vars" id="tb-restore-vars" title="<?= __('Show Variables') ?>">&laquo;</button>
   </div>
 
-  <div id="tb-preview-panel" class="tb-preview-panel" style="display:none">
-    <div class="tb-preview-header">
-      <h4><?= __('Preview') ?> — <?= h($slotLabels[$currentSlot] ?? $currentSlot) ?></h4>
-      <div class="tb-preview-controls">
-        <select id="tb-preview-slot">
-          <?php foreach ($slotLabels as $sk => $sl): ?>
-            <option value="<?= h($sk) ?>" <?= $sk === $currentSlot ? 'selected' : '' ?>><?= h($sl) ?></option>
-          <?php endforeach; ?>
-        </select>
-        <div class="tb-viewport-btns">
-          <button class="tb-viewport-btn active" data-vp="desktop" title="Desktop (100%)">&#x25A1;</button>
-          <button class="tb-viewport-btn" data-vp="tablet" title="Tablet (768px)">&#x25AD;</button>
-          <button class="tb-viewport-btn" data-vp="mobile" title="Mobile (375px)">&#x25B7;</button>
-        </div>
-        <button id="tb-preview-close" class="btn btn-sm btn-outline">&times;</button>
-      </div>
-    </div>
-    <iframe id="tb-preview-frame" class="tb-preview-frame" sandbox="allow-scripts allow-same-origin"></iframe>
-  </div>
-
   <div id="tb-manifest-modal" class="tb-modal" style="display:none">
     <div class="tb-modal-content">
       <div class="tb-modal-header"><h4><?= __('Edit theme.json') ?></h4><button class="tb-modal-close">&times;</button></div>
@@ -146,8 +142,8 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
           </div>
           <div class="tb-field"><label><?= __('Screenshot') ?></label><input type="text" id="tb-m-screenshot" value="<?= h($manifest['screenshot'] ?? 'img.png') ?>"></div>
         </div>
-        <div class="tb-field"><label><?= __('CSS Files (one per line)') ?></label><textarea id="tb-m-styles" rows="3"><?= h(implode("\n", $manifest['styles'] ?? ['assets/css/style.css'])) ?></textarea></div>
-        <div class="tb-field"><label><?= __('JS Files (one per line)') ?></label><textarea id="tb-m-scripts" rows="2"><?= h(implode("\n", $manifest['scripts'] ?? ['assets/js/script.js'])) ?></textarea></div>
+        <div class="tb-field"><label><?= __('CSS Files (one per line)') ?></label><textarea id="tb-m-styles" rows="3"><?= h($assetLines($manifest['styles'] ?? ['assets/css/style.css'])) ?></textarea></div>
+        <div class="tb-field"><label><?= __('JS Files (one per line)') ?></label><textarea id="tb-m-scripts" rows="2"><?= h($assetLines($manifest['scripts'] ?? ['assets/js/script.js'])) ?></textarea></div>
       </div>
       <div class="tb-modal-footer">
         <button id="tb-manifest-save" class="btn btn-primary"><?= __('Save Manifest') ?></button>
@@ -180,11 +176,15 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
   var base = <?= json_encode($base) ?>;
   var slug = <?= json_encode($slug) ?>;
   var currentSlot = <?= json_encode($currentSlot) ?>;
+  var currentHash = <?= json_encode($currentHash) ?>;
+  var manifestHash = <?= json_encode($manifestHash) ?>;
   var csrfToken = <?= json_encode($csrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
   var currentAsset = 'assets/css/style.css';
+  var currentAssetHash = '';
+  var assetRequest = 0;
 
   var editor = CodeMirror.fromTextArea(document.getElementById('tb-code-editor'), {
-    mode: 'htmlmixed', lineNumbers: true, autoCloseBrackets: true,
+    mode: 'application/x-httpd-php', lineNumbers: true, autoCloseBrackets: true,
     autoCloseTags: true, styleActiveLine: true, indentUnit: 2, tabSize: 2,
     lineWrapping: true, viewportMargin: Infinity,
     foldGutter: true, gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"]
@@ -193,40 +193,22 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
 
   document.getElementById('tb-btn-save').addEventListener('click', function() {
     var btn = this; btn.disabled = true; btn.textContent = '<?= __('Saving...') ?>';
-    var fd = new FormData(); fd.append('theme', slug); fd.append('slot', currentSlot); fd.append('content', editor.getValue()); fd.append('csrf_token', csrfToken);
+    var fd = new FormData(); fd.append('theme', slug); fd.append('slot', currentSlot); fd.append('content', editor.getValue()); fd.append('expected_hash', currentHash); fd.append('csrf_token', csrfToken);
     fetch(base + '/?action=api&page=admin/tools/theme-builder/api/save_file', { method: 'POST', body: fd })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      if (data.success) { btn.textContent = '<?= __('Saved!') ?>'; setTimeout(function() { btn.textContent = '<?= __('Save') ?>'; btn.disabled = false; }, 1500); }
+      if (data.success) { currentHash = data.sha256; btn.textContent = '<?= __('Saved!') ?>'; setTimeout(function() { btn.textContent = '<?= __('Save') ?>'; btn.disabled = false; }, 1500); }
       else { alert(data.error || 'Save failed.'); btn.textContent = '<?= __('Save') ?>'; btn.disabled = false; }
-    });
-  });
-
-  var previewPanel = document.getElementById('tb-preview-panel');
-  var previewFrame = document.getElementById('tb-preview-frame');
-  function loadPreview(slot, full) {
-    previewFrame.src = base + '/?action=api&page=admin/tools/theme-builder/api/preview&theme=' + encodeURIComponent(slug) + '&slot=' + encodeURIComponent(slot || currentSlot) + (full ? '&full=1' : '');
-    previewPanel.style.display = 'flex';
-  }
-  document.getElementById('tb-btn-preview').addEventListener('click', function() { loadPreview(currentSlot, false); });
-  document.getElementById('tb-preview-close').addEventListener('click', function() { previewPanel.style.display = 'none'; });
-  document.getElementById('tb-preview-slot').addEventListener('change', function() { loadPreview(this.value, false); });
-
-  // Viewport switcher
-  document.querySelectorAll('.tb-viewport-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      document.querySelectorAll('.tb-viewport-btn').forEach(function(b) { b.classList.remove('active'); });
-      this.classList.add('active');
-      previewFrame.className = 'tb-preview-frame vt-' + this.dataset.vp;
-    });
+    })
+    .catch(function(err) { alert('Error: ' + err.message); btn.textContent = '<?= __('Save') ?>'; btn.disabled = false; });
   });
 
   var manifestModal = document.getElementById('tb-manifest-modal');
   document.getElementById('tb-btn-manifest').addEventListener('click', function() { manifestModal.style.display = 'flex'; });
   document.getElementById('tb-manifest-save').addEventListener('click', function() {
-    var fd = new FormData(); fd.append('theme', slug); fd.append('csrf_token', csrfToken);
+    var fd = new FormData(); fd.append('theme', slug); fd.append('expected_hash', manifestHash); fd.append('csrf_token', csrfToken);
     fd.append('manifest', JSON.stringify({
-      folder: slug, name: document.getElementById('tb-m-name').value,
+      name: document.getElementById('tb-m-name').value,
       description: document.getElementById('tb-m-description').value,
       version: document.getElementById('tb-m-version').value,
       author: document.getElementById('tb-m-author').value,
@@ -242,17 +224,28 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
 
   var assetModal = document.getElementById('tb-asset-modal');
   var assetEditor = null;
+  var assetSaveButton = document.getElementById('tb-asset-save');
   document.getElementById('tb-btn-assets').addEventListener('click', function() { assetModal.style.display = 'flex'; loadAsset(currentAsset); });
   function loadAsset(path) {
-    currentAsset = path;
+    var request = ++assetRequest;
+    assetSaveButton.disabled = true;
     fetch(base + '/?action=api&page=admin/tools/theme-builder/api/preview&theme=' + encodeURIComponent(slug) + '&asset=' + encodeURIComponent(path))
-    .then(function(r) { return r.text(); })
-    .then(function(content) {
+    .then(function(r) {
+      if (!r.ok) throw new Error('Asset load failed.');
+      var hash = r.headers.get('X-Theme-Builder-SHA256') || '';
+      return r.text().then(function(content) { return { content: content, hash: hash }; });
+    })
+    .then(function(result) {
+      if (request !== assetRequest) return;
+      currentAsset = path;
+      currentAssetHash = result.hash;
       if (assetEditor) assetEditor.toTextArea();
-      var ta = document.getElementById('tb-asset-editor'); ta.value = content;
+      var ta = document.getElementById('tb-asset-editor'); ta.value = result.content;
       assetEditor = CodeMirror.fromTextArea(ta, { mode: path.endsWith('.css') ? 'css' : 'javascript', lineNumbers: true, autoCloseBrackets: true, styleActiveLine: true, indentUnit: 2, tabSize: 2, lineWrapping: true, viewportMargin: Infinity });
       assetEditor.setSize('100%', '400px');
-    });
+      assetSaveButton.disabled = false;
+    })
+    .catch(function(err) { if (request === assetRequest) assetSaveButton.disabled = true; alert('Error: ' + err.message); });
   }
   document.querySelectorAll('.tb-asset-tab').forEach(function(tab) {
     tab.addEventListener('click', function() {
@@ -262,10 +255,11 @@ $currentFile = $slotFiles[$currentSlot] ?? '';
   });
   document.getElementById('tb-asset-save').addEventListener('click', function() {
     if (!assetEditor) return;
-    var fd = new FormData(); fd.append('theme', slug); fd.append('slot', '_asset'); fd.append('asset_path', currentAsset); fd.append('content', assetEditor.getValue()); fd.append('csrf_token', csrfToken);
+    var fd = new FormData(); fd.append('theme', slug); fd.append('slot', '_asset'); fd.append('asset_path', currentAsset); fd.append('content', assetEditor.getValue()); fd.append('expected_hash', currentAssetHash); fd.append('csrf_token', csrfToken);
     fetch(base + '/?action=api&page=admin/tools/theme-builder/api/save_file', { method: 'POST', body: fd })
     .then(function(r) { return r.json(); })
-    .then(function(data) { if (data.success) { alert('<?= __('Asset saved!') ?>'); } else { alert(data.error || 'Failed.'); } });
+    .then(function(data) { if (data.success) { currentAssetHash = data.sha256; alert('<?= __('Asset saved!') ?>'); } else { alert(data.error || 'Failed.'); } })
+    .catch(function(err) { alert('Error: ' + err.message); });
   });
 
   document.querySelectorAll('.tb-modal-close').forEach(function(btn) {

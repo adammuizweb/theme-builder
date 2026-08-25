@@ -4,7 +4,7 @@ declare(strict_types=1);
 // Theme Builder — Dashboard
 
 if (!function_exists('h')) {
-    function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES, 'UTF-8'); }
+    function h(string $s): string { return htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 }
 
 $pdo = $GLOBALS['pdo'] ?? null;
@@ -15,6 +15,7 @@ $csrfToken = csrf_token();
 $base = defined('ADMIN_BASE_PATH') ? ADMIN_BASE_PATH : '/adiwira';
 $selfUrl = $base . '/?page=admin/tools/theme-builder';
 $editorUrl = $base . '/?page=admin/tools/theme-builder/editor';
+$installedUrl = $base . '/?page=admin/tools/theme-builder/installed';
 
 $flash = $_GET['flash'] ?? '';
 $flashType = $_GET['flash_type'] ?? 'success';
@@ -23,9 +24,12 @@ $themes = ThemeWorkspace::listThemes();
 ?>
 
 <div class="tb-dashboard">
-  <div class="tb-header">
-    <h2><?= __('Theme Builder') ?></h2>
-    <p class="muted"><?= __('Create custom themes with HTML, CSS, and JS. Edit slot templates with variable reference, preview live, then build an installable ZIP.') ?></p>
+  <div class="tb-header tb-header-row">
+    <div>
+      <h2><?= __('Theme Builder') ?></h2>
+      <p class="muted"><?= __('Create custom themes with guarded PHP, CSS, and JavaScript editing, then build a validated installable ZIP.') ?></p>
+    </div>
+    <a href="<?= h($installedUrl) ?>" class="btn btn-outline"><?= __('Inspect Installed Themes') ?></a>
   </div>
 
   <?php if ($flash): ?>
@@ -39,7 +43,7 @@ $themes = ThemeWorkspace::listThemes();
       <div class="tb-form-row">
         <div class="tb-field">
           <label for="tb-slug"><?= __('Slug') ?> *</label>
-          <input type="text" id="tb-slug" name="slug" required pattern="[a-zA-Z0-9_\-]+" placeholder="my-theme" maxlength="50">
+          <input type="text" id="tb-slug" name="slug" required pattern="[a-z0-9][a-z0-9_\-]{0,49}" placeholder="my-theme" maxlength="50">
           <small><?= __('Folder name — lowercase, no spaces') ?></small>
         </div>
         <div class="tb-field">
@@ -88,10 +92,14 @@ $themes = ThemeWorkspace::listThemes();
               </span>
             </div>
             <div class="tb-theme-actions">
-              <a href="<?= $editorUrl ?>&theme=<?= h($t['slug']) ?>" class="btn btn-sm btn-primary"><?= __('Edit') ?></a>
-              <button class="btn btn-sm btn-outline tb-btn-build" data-slug="<?= h($t['slug']) ?>"><?= __('Build') ?></button>
-              <button class="btn btn-sm btn-outline tb-btn-install" data-slug="<?= h($t['slug']) ?>"><?= __('Install') ?></button>
-              <button class="btn btn-sm btn-danger tb-btn-delete" data-slug="<?= h($t['slug']) ?>">&times;</button>
+              <?php if (!empty($t['legacy_slug'])): ?>
+                <span class="tb-status tb-incomplete"><?= __('Legacy slug: rename this draft on disk before editing.') ?></span>
+              <?php else: ?>
+                <a href="<?= $editorUrl ?>&theme=<?= h($t['slug']) ?>" class="btn btn-sm btn-primary"><?= __('Edit') ?></a>
+                <button class="btn btn-sm btn-outline tb-btn-build" data-slug="<?= h($t['slug']) ?>"><?= __('Build') ?></button>
+                <button class="btn btn-sm btn-outline tb-btn-install" data-slug="<?= h($t['slug']) ?>"><?= __('Install') ?></button>
+                <button class="btn btn-sm btn-danger tb-btn-delete" data-slug="<?= h($t['slug']) ?>">&times;</button>
+              <?php endif; ?>
             </div>
           </div>
         <?php endforeach; ?>
