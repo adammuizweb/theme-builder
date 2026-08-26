@@ -72,7 +72,6 @@ $assetLines = static function (mixed $entries): string {
     <h3><?= h($manifest['name'] ?? $slug) ?> <span class="tb-version">v<?= h($manifest['version'] ?? '0.1.0') ?></span></h3>
     <div class="tb-editor-actions">
       <button id="tb-btn-save" class="btn btn-sm btn-primary"><?= __('Save') ?></button>
-      <button class="btn btn-sm btn-outline" disabled title="<?= __('PHP preview is disabled until an isolated preview runtime is available.') ?>"><?= __('Preview unavailable') ?></button>
       <button id="tb-btn-manifest" class="btn btn-sm btn-outline"><?= __('theme.json') ?></button>
       <button id="tb-btn-assets" class="btn btn-sm btn-outline"><?= __('CSS/JS') ?></button>
     </div>
@@ -230,7 +229,7 @@ $assetLines = static function (mixed $entries): string {
   function loadAsset(path) {
     var request = ++assetRequest;
     assetSaveButton.disabled = true;
-    fetch(base + '/?action=api&page=admin/tools/theme-builder/api/preview&theme=' + encodeURIComponent(slug) + '&asset=' + encodeURIComponent(path))
+    fetch(base + '/?action=api&page=admin/tools/theme-builder/api/read_asset&theme=' + encodeURIComponent(slug) + '&asset=' + encodeURIComponent(path))
     .then(function(r) {
       if (!r.ok) throw new Error('Asset load failed.');
       var hash = r.headers.get('X-Theme-Builder-SHA256') || '';

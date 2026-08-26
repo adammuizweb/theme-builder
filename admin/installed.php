@@ -359,6 +359,43 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
 
       <article class="tb-owner-card">
         <header>
+          <div><span><?= __('Customizer-backed data') ?></span><h5><?= __('Theme Files') ?></h5></div>
+          <strong><?= count($relationships['theme_files']['items']) ?></strong>
+        </header>
+        <?php if ($relationships['theme_files']['error'] !== null): ?>
+          <p class="tb-owner-empty"><?= h(__((string)$relationships['theme_files']['error'])) ?></p>
+        <?php elseif (!$relationships['theme_files']['available']): ?>
+          <p class="tb-owner-empty"><?= __('Content Translation is unavailable or access to its Theme File editor is not allowed.') ?></p>
+        <?php elseif ($relationships['theme_files']['items'] === []): ?>
+          <p class="tb-owner-empty"><?= __('This theme declares no translatable Theme File resources.') ?></p>
+        <?php else: ?>
+          <div class="tb-owner-list">
+            <?php foreach ($relationships['theme_files']['items'] as $resource): ?>
+              <div class="tb-owner-item<?= $resource['source_file_id'] === $fileId ? ' is-current' : '' ?>">
+                <div class="tb-owner-item-title">
+                  <strong><?= h($resource['label']) ?></strong>
+                  <code><?= h($resource['id']) ?></code>
+                </div>
+                <div class="tb-owner-meta">
+                  <span><?= h(sprintf(__('%d translatable fields'), $resource['field_count'])) ?></span>
+                  <?php if ($resource['source_path'] !== null): ?><span><?= h($resource['source_path']) ?></span><?php endif; ?>
+                </div>
+                <div class="tb-owner-actions">
+                  <?php if ($resource['source_url'] !== null): ?><a class="btn btn-sm btn-outline" href="<?= h($resource['source_url']) ?>"><?= __('Inspect Source') ?></a><?php endif; ?>
+                  <?php foreach ($resource['translations'] as $translation): ?>
+                    <?php $translationStatus = $translation['status'] !== null ? ucfirst($translation['status']) : 'Not started'; ?>
+                    <a class="btn btn-sm btn-outline" href="<?= h($translation['url']) ?>"><?= h(strtoupper($translation['locale']) . ': ' . __($translationStatus)) ?></a>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+            <?php endforeach; ?>
+          </div>
+          <?php if ($relationships['theme_files']['locales_truncated']): ?><p class="tb-owner-note"><?= __('Showing Content Translation links for the first 20 valid locales.') ?></p><?php endif; ?>
+        <?php endif; ?>
+      </article>
+
+      <article class="tb-owner-card">
+        <header>
           <div><span><?= __('Physical PHP source') ?></span><h5><?= __('Theme Sections') ?></h5></div>
           <strong><?= count($relationships['sections']['items']) ?></strong>
         </header>

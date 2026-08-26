@@ -1,6 +1,6 @@
 {
   "name": "theme-builder",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "title": "Theme Builder",
   "description": "Site Owner PHP theme source workspace with guarded editing, durable revisions, explicit Core update decisions, and read-only navigation to owner workspaces.",
   "author": "Adam Muiz",
@@ -67,8 +67,8 @@
         "roles": ["admin"]
       },
       {
-        "route": "admin/tools/theme-builder/api/preview",
-        "file": "admin/api/preview.php",
+        "route": "admin/tools/theme-builder/api/read_asset",
+        "file": "admin/api/read_asset.php",
         "hidden": true,
         "site_owner": true,
         "roles": ["admin"]
@@ -157,7 +157,7 @@
     ]
   },
   "assets": {
-    "css": ["/static/plugins/theme-builder/theme-builder.css?v=1.6.0"],
+    "css": ["/static/plugins/theme-builder/theme-builder.css?v=1.7.0"],
     "js": []
   }
 }

@@ -6,6 +6,7 @@ final class ThemeOwnerNavigator
 {
     private const MAX_TEMPLATES = 200;
     private const MAX_ASSIGNMENTS = 1000;
+    private const MAX_THEME_FILE_RESOURCES = 100;
     private const MAX_TRANSLATION_LOCALES = 20;
     private const CONTENT_BATCH_SIZE = 10;
 
@@ -24,6 +25,7 @@ final class ThemeOwnerNavigator
 
         return [
             'templates' => $this->templates($folder, !empty($theme['active']), $base, $returnUrl),
+            'theme_files' => $this->themeFiles($folder, $inspection, $base, $returnUrl),
             'sections' => $this->sections($folder, $inspection, $base),
         ];
     }
@@ -241,6 +243,100 @@ final class ThemeOwnerNavigator
         }
 
         return ['items' => $items];
+    }
+
+    private function themeFiles(string $folder, array $inspection, string $base, string $returnUrl): array
+    {
+        try {
+            $route = $this->ownerRoute('content-translation', 'admin/tools/content-translation/theme-file-edit');
+            $available = $route !== null
+                && function_exists('ct_theme_file_resources')
+                && function_exists('ct_theme_file_translation_statuses')
+                && function_exists('ct_enabled_locales');
+            if (!$available) {
+                return [
+                    'items' => [],
+                    'available' => false,
+                    'locales_truncated' => false,
+                    'error' => null,
+                ];
+            }
+
+            $resources = ct_theme_file_resources($this->pdo, $folder);
+            if (!is_array($resources)) throw new RuntimeException('Theme File resource inventory is invalid.');
+            if (count($resources) > self::MAX_THEME_FILE_RESOURCES) {
+                throw new RuntimeException('Theme File resource inventory exceeds the safe navigation limit.');
+            }
+
+            $validResources = [];
+            foreach ($resources as $resource) {
+                if (!is_array($resource) || !is_string($resource['theme_folder'] ?? null)
+                    || !hash_equals($folder, $resource['theme_folder'])) continue;
+                $slot = is_string($resource['slot_key'] ?? null) ? trim($resource['slot_key']) : '';
+                $id = is_string($resource['id'] ?? null) ? $resource['id'] : '';
+                if ($slot === '' || strlen($slot) > 150 || !hash_equals($folder . ':' . $slot, $id)) continue;
+                $validResources[$id] = $resource;
+            }
+
+            $localeState = $this->translationLocales();
+            $statuses = $validResources !== [] && $localeState['items'] !== []
+                ? ct_theme_file_translation_statuses($this->pdo, array_values($validResources))
+                : [];
+            if (!is_array($statuses)) $statuses = [];
+
+            $sourceFiles = [];
+            foreach ((array)($inspection['files'] ?? []) as $file) {
+                if (!is_array($file) || ($file['category'] ?? null) !== 'slot'
+                    || !is_string($file['slot'] ?? null) || !is_string($file['id'] ?? null)) continue;
+                $sourceFiles[$file['slot']] = $file;
+            }
+
+            $items = [];
+            foreach ($validResources as $id => $resource) {
+                $slot = (string)$resource['slot_key'];
+                $source = $sourceFiles[$slot] ?? null;
+                $translations = [];
+                foreach ($localeState['items'] as $locale) {
+                    $status = $statuses[$id][$locale] ?? null;
+                    $translations[] = [
+                        'locale' => $locale,
+                        'status' => in_array($status, ['draft', 'published', 'incomplete'], true) ? $status : null,
+                        'url' => $base . '/?' . http_build_query([
+                            'page' => 'admin/tools/content-translation/theme-file-edit',
+                            'theme_folder' => $folder,
+                            'slot_key' => $slot,
+                            'locale' => $locale,
+                            'return_to' => $returnUrl,
+                        ]),
+                    ];
+                }
+                $items[] = [
+                    'id' => $id,
+                    'label' => (string)($resource['label'] ?? $slot),
+                    'slot' => $slot,
+                    'field_count' => count((array)($resource['fields'] ?? [])),
+                    'source_path' => is_array($source) ? (string)($source['path'] ?? '') : null,
+                    'source_file_id' => is_array($source) ? (string)($source['id'] ?? '') : null,
+                    'source_url' => is_array($source) ? $this->sourceUrl($base, $folder, (string)$source['id']) : null,
+                    'translations' => $translations,
+                ];
+            }
+
+            return [
+                'items' => $items,
+                'available' => true,
+                'locales_truncated' => $localeState['truncated'],
+                'error' => null,
+            ];
+        } catch (Throwable $error) {
+            error_log('[theme-builder-owner-navigation] Theme File lookup failed: ' . $error->getMessage());
+            return [
+                'items' => [],
+                'available' => false,
+                'locales_truncated' => false,
+                'error' => 'Theme File translation relationships could not be loaded.',
+            ];
+        }
     }
 
     private function ownerRoute(string $plugin, string $route): ?array

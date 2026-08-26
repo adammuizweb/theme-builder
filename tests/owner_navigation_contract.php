@@ -15,8 +15,12 @@ $GLOBALS['_tb_owner_core_allowed'] = true;
 $GLOBALS['_tb_owner_jvb_status'] = [];
 $GLOBALS['_tb_owner_jvb_calls'] = 0;
 $GLOBALS['_tb_owner_ct_calls'] = 0;
+$GLOBALS['_tb_owner_ct_package_calls'] = 0;
 $GLOBALS['_tb_owner_ct_folder'] = 'active';
 $GLOBALS['_tb_owner_ct_locales'] = ['id', 'de', '../unsafe', 'id'];
+$GLOBALS['_tb_owner_ct_file_calls'] = 0;
+$GLOBALS['_tb_owner_ct_file_folder'] = 'active';
+$GLOBALS['_tb_owner_ct_file_resource_count'] = 1;
 
 function plugin_resolve_route(string $route): ?array
 {
@@ -45,12 +49,14 @@ function jvb_layout_statuses(PDO $pdo, array $postIds): array
 function ct_parse_theme_section_composition(string $content): ?array
 {
     $GLOBALS['_tb_owner_ct_calls']++;
+    $GLOBALS['_tb_owner_ct_package_calls']++;
     return str_contains($content, 'widget:theme_section') ? [['name' => 'hero']] : null;
 }
 
 function ct_theme_section_source_resource(PDO $pdo, array $post, bool $renderPreviews = true): ?array
 {
     $GLOBALS['_tb_owner_ct_calls']++;
+    $GLOBALS['_tb_owner_ct_package_calls']++;
     return ($post['type'] ?? '') === 'theme'
         ? ['theme_folder' => $GLOBALS['_tb_owner_ct_folder'], 'sections' => [['name' => 'hero']]]
         : null;
@@ -60,6 +66,30 @@ function ct_enabled_locales(PDO $pdo): array
 {
     $GLOBALS['_tb_owner_ct_calls']++;
     return $GLOBALS['_tb_owner_ct_locales'];
+}
+
+function ct_theme_file_resources(PDO $pdo, ?string $themeFolder = null): array
+{
+    $GLOBALS['_tb_owner_ct_file_calls']++;
+    $resources = [];
+    for ($index = 0; $index < $GLOBALS['_tb_owner_ct_file_resource_count']; $index++) {
+        $slot = $index === 0 ? 'main.homepage' : 'custom.' . $index;
+        $folder = $GLOBALS['_tb_owner_ct_file_folder'];
+        $resources[$folder . ':' . $slot] = [
+            'id' => $folder . ':' . $slot,
+            'theme_folder' => $folder,
+            'slot_key' => $slot,
+            'label' => $index === 0 ? 'Homepage (main.homepage)' : 'Custom ' . $index,
+            'fields' => $index === 0 ? ['headline' => [], 'summary' => []] : ['label' => []],
+        ];
+    }
+    return $resources;
+}
+
+function ct_theme_file_translation_statuses(PDO $pdo, array $resources): array
+{
+    $GLOBALS['_tb_owner_ct_file_calls']++;
+    return ['active:main.homepage' => ['id' => 'published', 'de' => 'draft']];
 }
 
 require_once dirname(__DIR__) . '/includes/class-theme-workspace.php';
@@ -86,6 +116,7 @@ try {
     file_put_contents($themesRoot . '/active/partials/shortcodes/section/hero.php',
         "<?php\nrequire __DIR__ . '/../../../main/sections/hero.php';\n");
     file_put_contents($themesRoot . '/active/main/sections/hero.php', "<?php echo 'hero';\n");
+    file_put_contents($themesRoot . '/active/main/homepage.php', "<?php echo 'homepage';\n");
     $wrapperHash = hash_file('sha256', $themesRoot . '/active/partials/shortcodes/section/hero.php');
     $leafHash = hash_file('sha256', $themesRoot . '/active/main/sections/hero.php');
 
@@ -121,7 +152,8 @@ try {
         && $absent['templates']['builder_available'] === false
         && $absent['templates']['translation_available'] === false,
         'absent or disabled owner routes leave Core inventory available without plugin links');
-    $check($GLOBALS['_tb_owner_jvb_calls'] === 0 && $GLOBALS['_tb_owner_ct_calls'] === 0,
+    $check($GLOBALS['_tb_owner_jvb_calls'] === 0 && $GLOBALS['_tb_owner_ct_calls'] === 0
+        && $GLOBALS['_tb_owner_ct_file_calls'] === 0,
         'absent or disabled owner routes invoke no owner-plugin storage API');
     $check(str_starts_with((string)$absent['templates']['items'][0]['core_url'], '/owner/?')
         && !str_contains((string)$absent['templates']['items'][0]['core_url'], '/adiwira'),
@@ -129,18 +161,23 @@ try {
 
     $builderRoute = 'admin/tools/jyavani-builder';
     $translationRoute = 'admin/tools/content-translation/theme-section-edit';
+    $themeFileRoute = 'admin/tools/content-translation/theme-file-edit';
     $GLOBALS['_tb_owner_routes'] = [
         $builderRoute => 'jyavani-builder',
         $translationRoute => 'content-translation',
+        $themeFileRoute => 'content-translation',
     ];
-    $GLOBALS['_tb_owner_allowed'] = [$builderRoute => false, $translationRoute => false];
+    $GLOBALS['_tb_owner_allowed'] = [$builderRoute => false, $translationRoute => false, $themeFileRoute => false];
+    $fileCallsBeforeDenied = $GLOBALS['_tb_owner_ct_file_calls'];
     $unauthorized = $navigator->relationships('active', $inspection, '/owner');
     $check($unauthorized['templates']['builder_available'] === false
         && $unauthorized['templates']['translation_available'] === false
-        && $GLOBALS['_tb_owner_jvb_calls'] === 0 && $GLOBALS['_tb_owner_ct_calls'] === 0,
+        && $unauthorized['theme_files']['available'] === false
+        && $GLOBALS['_tb_owner_jvb_calls'] === 0 && $GLOBALS['_tb_owner_ct_calls'] === 0
+        && $GLOBALS['_tb_owner_ct_file_calls'] === $fileCallsBeforeDenied,
         'unauthorized owner routes fail closed before invoking owner-plugin APIs');
 
-    $GLOBALS['_tb_owner_allowed'] = [$builderRoute => true, $translationRoute => true];
+    $GLOBALS['_tb_owner_allowed'] = [$builderRoute => true, $translationRoute => true, $themeFileRoute => true];
     $GLOBALS['_tb_owner_jvb_status'] = [10 => 'published', 20 => 'none'];
     $available = $navigator->relationships('active', $inspection, '/secret-admin');
     $byId = [];
@@ -155,13 +192,30 @@ try {
         && ($byId[20]['translations'] ?? null) === []
         && str_starts_with((string)($byId[10]['translations'][0]['url'] ?? ''), '/secret-admin/?'),
         'package-composed templates link only valid locales to the authorized Content Translation editor');
+    $themeFiles = $available['theme_files'];
+    $check($themeFiles['available'] === true && count($themeFiles['items']) === 1
+        && ($themeFiles['items'][0]['id'] ?? null) === 'active:main.homepage'
+        && ($themeFiles['items'][0]['field_count'] ?? null) === 2
+        && ($themeFiles['items'][0]['source_path'] ?? null) === 'main/homepage.php',
+        'declared Theme File resources map exact owner and slot identities to physical source');
+    $fileTranslations = $themeFiles['items'][0]['translations'] ?? [];
+    $check(array_column($fileTranslations, 'locale') === ['id', 'de']
+        && array_column($fileTranslations, 'status') === ['published', 'draft']
+        && str_contains((string)($fileTranslations[0]['url'] ?? ''), 'theme_folder=active')
+        && str_contains((string)($fileTranslations[0]['url'] ?? ''), 'slot_key=main.homepage'),
+        'Theme File navigation exposes bounded locale status and exact editor identity');
+    parse_str((string)parse_url((string)$fileTranslations[0]['url'], PHP_URL_QUERY), $themeFileQuery);
+    $check(($themeFileQuery['return_to'] ?? null) === '/secret-admin/?page=admin/tools/theme-builder/installed&theme=active',
+        'Theme File editor navigation preserves the exact inspector return URL');
 
     $GLOBALS['_tb_owner_ct_locales'] = array_map(static fn(int $index): string => 'x-' . $index, range(1, 25));
     $localeBound = $navigator->relationships('active', $inspection, '/owner');
     $localeTemplates = [];
     foreach ($localeBound['templates']['items'] as $template) $localeTemplates[$template['id']] = $template;
     $check(count($localeTemplates[10]['translations'] ?? []) === 20
-        && $localeBound['templates']['translation_locales_truncated'] === true,
+        && $localeBound['templates']['translation_locales_truncated'] === true
+        && count($localeBound['theme_files']['items'][0]['translations'] ?? []) === 20
+        && $localeBound['theme_files']['locales_truncated'] === true,
         'Content Translation navigation bounds and reports oversized locale sets');
     $GLOBALS['_tb_owner_ct_locales'] = ['id', 'de'];
 
@@ -176,22 +230,33 @@ try {
 
     $inactiveInspection = $inspection;
     $inactiveInspection['theme']['active'] = false;
-    $ctCallsBeforeInactive = $GLOBALS['_tb_owner_ct_calls'];
+    $ctPackageCallsBeforeInactive = $GLOBALS['_tb_owner_ct_package_calls'];
     $inactive = $navigator->relationships('active', $inactiveInspection, '/owner');
     $check($inactive['templates']['translation_available'] === false
         && ($inactive['templates']['items'][0]['translations'] ?? null) === []
-        && $GLOBALS['_tb_owner_ct_calls'] === $ctCallsBeforeInactive,
+        && $GLOBALS['_tb_owner_ct_package_calls'] === $ctPackageCallsBeforeInactive,
         'inactive physical themes never resolve or inspect active-theme translation packages');
 
     $GLOBALS['_tb_owner_ct_folder'] = 'another-theme';
     $ownerMismatch = $navigator->relationships('active', $inspection, '/owner');
     $mismatchLinks = array_merge(...array_map(static fn(array $template): array => $template['translations'], $ownerMismatch['templates']['items']));
     $check($mismatchLinks === [], 'Content Translation links require exact physical theme ownership');
+    $GLOBALS['_tb_owner_ct_file_folder'] = 'another-theme';
+    $fileOwnerMismatch = $navigator->relationships('active', $inspection, '/owner');
+    $check($fileOwnerMismatch['theme_files']['items'] === [],
+        'Theme File navigation rejects resources owned by a different physical theme');
+    $GLOBALS['_tb_owner_ct_file_folder'] = 'active';
 
     $GLOBALS['_tb_owner_core_allowed'] = false;
     $coreDenied = $navigator->relationships('active', $inspection, '/owner');
     $check(array_filter(array_column($coreDenied['templates']['items'], 'core_url')) === [],
         'unauthorized Core Theme Template editor links fail closed');
+
+    $GLOBALS['_tb_owner_ct_file_resource_count'] = 101;
+    $resourceBound = $navigator->relationships('active', $inspection, '/owner');
+    $check($resourceBound['theme_files']['items'] === [] && $resourceBound['theme_files']['error'] !== null,
+        'oversized Theme File resource inventories fail closed');
+    $GLOBALS['_tb_owner_ct_file_resource_count'] = 1;
 
     $pdo->exec('PRAGMA query_only = OFF');
     $pdo->exec('DELETE FROM assignments');

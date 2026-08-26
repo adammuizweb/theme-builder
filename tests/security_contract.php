@@ -20,11 +20,12 @@ try {
 }
 
 $check(($manifest['name'] ?? null) === 'theme-builder', 'manifest identity is theme-builder');
-$check(($manifest['version'] ?? null) === '1.6.0' && ($manifest['requires']['jyavani'] ?? null) === '>=2.3.87', 'manifest is the 1.6.0 candidate for the generic Core contract');
+$check(($manifest['version'] ?? null) === '1.7.0' && ($manifest['requires']['jyavani'] ?? null) === '>=2.3.87', 'manifest is the 1.7.0 candidate for Theme File owner navigation');
 $check(in_array('tokenizer', $manifest['requires']['extensions'] ?? [], true), 'manifest declares the dependency-parser tokenizer extension');
 $check(!array_key_exists('permissions', $manifest), 'manifest declares no delegable Theme Builder permissions');
 $pages = $manifest['admin']['pages'] ?? [];
 $check(is_array($pages) && count($pages) === 17, 'manifest declares all seventeen Theme Builder routes');
+$check(!in_array('admin/tools/theme-builder/api/preview', array_column($pages, 'route'), true), 'manifest exposes no live preview route');
 foreach (is_array($pages) ? $pages : [] as $page) {
     $route = (string)($page['route'] ?? 'unknown');
     $check(($page['site_owner'] ?? false) === true, "{$route} is declared Site Owner-only");
@@ -63,13 +64,15 @@ $check(str_contains($dashboard, 'a.href = data.download_url'), 'successful build
 $check(str_contains($editor, 'json_encode($csrfToken'), 'editor serializes its CSRF token safely');
 $check(substr_count($editor, "fd.append('csrf_token', csrfToken)") === 3, 'slot, manifest, and asset writes send CSRF');
 $check(substr_count($editor, "fd.append('expected_hash'") === 3, 'slot, manifest, and asset writes send an optimistic source hash');
-$check(!str_contains($editor, 'allow-same-origin') && !str_contains($editor, 'tb-preview-frame'), 'editor does not expose an authenticated same-origin PHP preview iframe');
-$check(!str_contains($editor, 'preview&theme=') || !str_contains($editor, 'preview&theme=' . "' + encodeURIComponent(slug) + '&csrf_token="), 'preview URLs do not expose CSRF tokens');
+$check(!str_contains($editor, 'Preview unavailable') && !str_contains($editor, 'api/preview')
+    && !str_contains($editor, 'tb-preview'), 'editor exposes no live preview control, iframe, or endpoint');
+$check(!str_contains($builderCss, '.tb-preview') && !str_contains($builderCss, '.tb-viewport'), 'Theme Builder CSS contains no live preview remnants');
 
 $bootstrap = (string)file_get_contents($root . '/plugin.php');
 $integrationSource = (string)file_get_contents($root . '/includes/class-theme-builder-core-integration.php');
-$preview = (string)file_get_contents($root . '/admin/api/preview.php');
-$check(!str_contains($bootstrap, 'class-preview-renderer.php') && !is_file($root . '/includes/class-preview-renderer.php'), 'plugin package contains no in-process PHP preview renderer');
+$assetReader = (string)file_get_contents($root . '/admin/api/read_asset.php');
+$check(!str_contains($bootstrap, 'class-preview-renderer.php') && !is_file($root . '/includes/class-preview-renderer.php')
+    && !is_file($root . '/admin/api/preview.php'), 'plugin package contains no PHP preview renderer or endpoint');
 $check(str_contains($bootstrap, 'class-theme-fork-service.php'), 'plugin bootstrap loads the managed fork service');
 $check(str_contains($bootstrap, 'class-theme-owner-navigator.php'), 'plugin bootstrap loads the read-only owner workspace navigator');
 $check(str_contains($bootstrap, 'class-theme-builder-core-integration.php') && str_contains($bootstrap, 'ThemeBuilderCoreIntegration::register')
@@ -79,7 +82,9 @@ $check(substr_count($integrationSource, "add_action('") + substr_count($integrat
     && str_contains($integrationSource, "add_filter('plugin_state_change_preflight'")
     && str_contains($integrationSource, "['disable', 'delete']") && str_contains($integrationSource, 'dirtyState($folder)'),
     'Core integration registers five callbacks and protects Store PHP state during plugin disable/delete');
-$check(str_contains($preview, "http_response_code(501)") && !str_contains($preview, 'PreviewRenderer::'), 'preview endpoint refuses PHP execution');
+$check(str_contains($assetReader, 'ThemeWorkspace::readAssetState($slug, $asset)')
+    && str_contains($assetReader, 'Cache-Control: no-store')
+    && preg_match('/\b(?:include|require|eval)\b/', $assetReader) !== 1, 'asset reader returns allowlisted source without executing theme code');
 
 $mutations = [
     'create_theme.php' => 'ThemeWorkspace::createTheme',
@@ -252,7 +257,7 @@ $check(str_contains($installed, '$inspector->inspect($forkCandidate)') && str_co
 $build = (string)file_get_contents($root . '/admin/api/build_zip.php');
 $check(str_contains($build, '?action=api&page=admin/tools/theme-builder/api/download_zip&theme='), 'build response uses the pre-layout API download route');
 
-foreach (['preview.php', 'download_zip.php', 'list_theme_revisions.php'] as $file) {
+foreach (['read_asset.php', 'download_zip.php', 'list_theme_revisions.php'] as $file) {
     $source = (string)file_get_contents($root . '/admin/api/' . $file);
     $check(str_contains($source, 'adiwira_require_site_owner($pdo, false)'), "{$file} requires Site Owner");
     $check(str_contains($source, "!== 'GET'") && str_contains($source, '405'), "{$file} is GET-only");
