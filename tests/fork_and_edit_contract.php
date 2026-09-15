@@ -293,6 +293,23 @@ JSON;
     $insert->execute(['precise-number', 'Precise', '1.0.0', 0, '', '']);
     $precise = $service->fork('precise-number', 'precise-number-fork', 'Precise Fork', 'Precise Fork', 7);
     $check(($precise['success'] ?? true) === false && !file_exists($themesRoot . '/precise-number-fork'), 'manifest decimals too precise for lossless decoding fail before publication');
+
+    $pdo->prepare('UPDATE themes SET is_active = 1 WHERE folder_name = ?')->execute(['source-fork']);
+    $activeDelete = $service->deleteFork('source-fork');
+    $check(($activeDelete['success'] ?? true) === false && is_dir($forkRoot), 'active managed fork deletion is rejected without filesystem mutation');
+    $pdo->prepare('UPDATE themes SET is_active = 0 WHERE folder_name = ?')->execute(['source-fork']);
+    $pdo->prepare('INSERT INTO assignments (slot_key, theme_id, theme_file) VALUES (?, ?, ?)')->execute(['footer', (int)$targetRow['id'], 'footer.php']);
+    $assignedDelete = $service->deleteFork('source-fork');
+    $check(($assignedDelete['success'] ?? true) === false && is_dir($forkRoot), 'assigned managed fork deletion is rejected without filesystem mutation');
+    $pdo->prepare('DELETE FROM assignments WHERE theme_id = ?')->execute([(int)$targetRow['id']]);
+    $pdo->prepare('INSERT INTO theme_zone_items (theme_folder, zone_slug) VALUES (?, ?)')->execute(['source-fork', 'footer']);
+    $deleted = $service->deleteFork('source-fork');
+    $check(($deleted['success'] ?? false) === true && !file_exists($forkRoot)
+        && !file_exists($metadataPath)
+        && !is_dir($workspace . '/.revisions/' . $targetRow['id'])
+        && (int)$pdo->query("SELECT COUNT(*) FROM themes WHERE folder_name = 'source-fork'")->fetchColumn() === 0
+        && (int)$pdo->query("SELECT COUNT(*) FROM theme_zone_items WHERE theme_folder = 'source-fork'")->fetchColumn() === 0,
+        'inactive unassigned managed fork deletion removes its registry, tree, metadata, revisions, and Theme Zone data');
     $events = $GLOBALS['_theme_core_lock_events'] ?? [];
     $check(($events[0] ?? null) === ['acquire', ['0-theme-lifecycle', 'SOURCE', 'wrong-case-fork']]
         && in_array(['acquire', ['0-theme-lifecycle', 'residual-fork', 'source']], $events, true)

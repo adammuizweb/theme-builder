@@ -20,11 +20,11 @@ try {
 }
 
 $check(($manifest['name'] ?? null) === 'theme-builder', 'manifest identity is theme-builder');
-$check(($manifest['version'] ?? null) === '1.7.0' && ($manifest['requires']['jyavani'] ?? null) === '>=2.3.87', 'manifest is the 1.7.0 candidate for Theme File owner navigation');
+$check(($manifest['version'] ?? null) === '1.7.1' && ($manifest['requires']['jyavani'] ?? null) === '>=2.3.87', 'manifest is the 1.7.1 managed-fork deletion release');
 $check(in_array('tokenizer', $manifest['requires']['extensions'] ?? [], true), 'manifest declares the dependency-parser tokenizer extension');
 $check(!array_key_exists('permissions', $manifest), 'manifest declares no delegable Theme Builder permissions');
 $pages = $manifest['admin']['pages'] ?? [];
-$check(is_array($pages) && count($pages) === 17, 'manifest declares all seventeen Theme Builder routes');
+$check(is_array($pages) && count($pages) === 18, 'manifest declares all eighteen Theme Builder routes');
 $check(!in_array('admin/tools/theme-builder/api/preview', array_column($pages, 'route'), true), 'manifest exposes no live preview route');
 foreach (is_array($pages) ? $pages : [] as $page) {
     $route = (string)($page['route'] ?? 'unknown');
@@ -49,6 +49,7 @@ $check(str_contains($installed, 'adiwira_require_site_owner($pdo, false)'), 'ins
 $check(!str_contains($dashboard, 'plugin.theme-builder.') && !str_contains($editor, 'plugin.theme-builder.') && !str_contains($installed, 'plugin.theme-builder.'), 'Theme Builder UI has no delegated permission path');
 $check(str_contains($installed, 'api/fork_theme') && str_contains($installed, 'api/save_fork_file')
     && str_contains($installed, 'api/save_installed_file') && str_contains($installed, 'api/restore_theme_revision')
+    && str_contains($installed, 'api/delete_fork')
     && !str_contains($installed, 'asset_path'), 'installed workflow uses dedicated fork, direct-save, and revision APIs');
 $check(str_contains($installed, "data.append('file_id',") && str_contains($installed, "data.append('expected_hash',") && !str_contains($installed, "data.append('path',"), 'managed-fork save submits an opaque file ID and original hash, never a path');
 $check(str_contains($installed, 'readOnly: <?= ($fileEditable && !$startsReadOnly)') && str_contains($installed, 'base64_encode($sourceContent)')
@@ -118,6 +119,7 @@ foreach (['create_theme.php', 'save_file.php', 'save_manifest.php', 'build_zip.p
 $forkMutations = [
     'fork_theme.php' => '->fork(',
     'save_fork_file.php' => '->savePhp(',
+    'delete_fork.php' => '->deleteFork(',
 ];
 foreach ($forkMutations as $file => $operation) {
     $source = (string)file_get_contents($root . '/admin/api/' . $file);
@@ -201,9 +203,11 @@ $check(str_contains($editor, 'data-mobile-panel="code"') && str_contains($editor
 $check(str_contains($forkServiceSource, 'root_identity') && str_contains($forkServiceSource, 'quarantineAndRemove($target, $targetFolder, $promotedIdentity)'), 'managed-fork metadata and rollback bind to the promoted physical root identity');
 $check(str_contains($forkServiceSource, "mkdir(\$stage, 0700)") && str_contains($forkServiceSource, 'applyPublishedModes($stage)'), 'fork copy remains private until its verified tree is ready for publication');
 $forkMethod = substr($forkServiceSource, (int)strpos($forkServiceSource, 'public function fork('), (int)strpos($forkServiceSource, 'public function forkState(') - (int)strpos($forkServiceSource, 'public function fork('));
+$deleteForkMethod = substr($forkServiceSource, (int)strpos($forkServiceSource, 'public function deleteFork('), (int)strpos($forkServiceSource, 'public function savePhp(') - (int)strpos($forkServiceSource, 'public function deleteFork('));
 $replaceMethod = substr($forkServiceSource, (int)strpos($forkServiceSource, 'private function replacePhp('), (int)strpos($forkServiceSource, 'private function validInstalledFolder(') - (int)strpos($forkServiceSource, 'private function replacePhp('));
 $exportMethod = substr($forkServiceSource, (int)strpos($forkServiceSource, 'public function buildPhpSourceExport('), (int)strpos($forkServiceSource, 'public function cleanupPhpSourceExport(') - (int)strpos($forkServiceSource, 'public function buildPhpSourceExport('));
 $check(strpos($forkMethod, 'acquireCoreLocks(') < strpos($forkMethod, 'acquireLocks(')
+    && strpos($deleteForkMethod, 'acquireCoreLocks(') < strpos($deleteForkMethod, 'acquireLocks(')
     && strpos($replaceMethod, 'acquireCoreLocks(') < strpos($replaceMethod, 'acquireLocks(')
     && strpos($exportMethod, 'acquireCoreLocks(') < strpos($exportMethod, 'acquireLocks('),
     'fork publication, direct/managed save, and export acquire Core locks before Theme Builder private locks');
@@ -215,7 +219,7 @@ $check(strpos($forkMethod, 'acquireCoreLocks(') < strpos($forkMethod, 'package_p
 $check(strpos($replaceMethod, 'releaseLocks($locks)') < strpos($replaceMethod, 'releaseCoreLocks($coreLocks)')
     && strpos($exportMethod, 'releaseLocks($locks)') < strpos($exportMethod, 'releaseCoreLocks($coreLocks)'),
     'source operations release Core locks last');
-$check(substr_count($forkServiceSource, "acquireCoreLocks(['0-theme-lifecycle'") === 3,
+$check(substr_count($forkServiceSource, "acquireCoreLocks(['0-theme-lifecycle'") === 4,
     'every Theme Builder Core lock acquisition places the generic lifecycle lock before exact affected folders');
 $check(str_contains($forkServiceSource, "function_exists('theme_operation_acquire')")
     && str_contains($forkServiceSource, "function_exists('theme_operation_release')")

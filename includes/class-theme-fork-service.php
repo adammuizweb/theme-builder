@@ -215,6 +215,93 @@ final class ThemeForkService
         }
     }
 
+    public function deleteFork(string $folder): array
+    {
+        if (!ThemeWorkspace::isValidSlug($folder)) {
+            return ['success' => false, 'error' => 'Invalid managed fork folder.'];
+        }
+
+        $coreLocks = [];
+        $locks = [];
+        $root = '';
+        $quarantine = '';
+        $rootIdentity = null;
+        $committed = false;
+        try {
+            $coreLocks = $this->acquireCoreLocks(['0-theme-lifecycle', $folder]);
+            $locks = $this->acquireLocks(['installed:' . $folder]);
+            $root = $this->themeRoot($folder);
+            if (function_exists('package_publication_recovery_paths')
+                && package_publication_recovery_paths($root) !== []) {
+                throw new RuntimeException('A prior theme publication recovery artifact requires manual resolution before deletion.');
+            }
+
+            $metadata = $this->readMetadata($folder);
+            if ($metadata === null) throw new RuntimeException('Only a Theme Builder managed fork can be deleted here.');
+            $rootIdentity = @lstat($root);
+            if (!is_array($rootIdentity)) throw new RuntimeException('Managed fork root is unavailable.');
+            $this->assertManagedRootIdentity($root, $metadata);
+            $this->scanTree($root);
+
+            $row = $this->lockThemeDatabaseState($folder);
+            $themeId = (int)$row['id'];
+            if ((int)($metadata['theme_id'] ?? 0) !== $themeId || !empty($row['is_active'])
+                || !empty($row['is_system']) || trim((string)($row['store_url'] ?? '')) !== ''
+                || trim((string)($row['store_slug'] ?? '')) !== '' || $this->assignmentCount($themeId) > 0) {
+                throw new RuntimeException('Only an inactive, unassigned Theme Builder managed fork can be deleted.');
+            }
+            $this->assertManagedRootIdentity($root, $metadata);
+
+            $quarantine = $this->themesRoot() . '/.theme-builder-delete-' . $folder . '-' . bin2hex(random_bytes(10));
+            if (!rename($root, $quarantine)) throw new RuntimeException('Could not quarantine the managed fork before deletion.');
+            $this->syncDirectory($this->themesRoot());
+            $quarantineIdentity = @lstat($quarantine);
+            if (!is_array($quarantineIdentity) || !$this->sameDirectory($rootIdentity, $quarantineIdentity)) {
+                throw new RuntimeException('Managed fork identity changed during deletion.');
+            }
+
+            $zones = $this->pdo->prepare('DELETE FROM theme_zone_items WHERE theme_folder = ?');
+            $zones->execute([$folder]);
+            $delete = $this->pdo->prepare('DELETE FROM themes WHERE id = ? AND folder_name = ? AND is_active = 0 AND is_system = 0 AND store_url = ? AND store_slug = ?');
+            $delete->execute([$themeId, $folder, '', '']);
+            if ($delete->rowCount() !== 1) throw new RuntimeException('Managed fork registration changed before deletion.');
+            $this->pdo->commit();
+            $committed = true;
+
+            $warnings = [];
+            $metadataPath = $this->metadataPath($folder);
+            if (is_link($metadataPath) || !is_file($metadataPath) || !@unlink($metadataPath)) {
+                $warnings[] = 'Managed fork metadata could not be removed.';
+            }
+            $revisionRoot = $this->privateDirectory('.revisions');
+            $revisionPath = $revisionRoot . '/' . $themeId;
+            if ((file_exists($revisionPath) || is_link($revisionPath))
+                && (is_link($revisionPath) || !$this->removeOwnedTree($revisionPath))) {
+                $warnings[] = 'Managed fork revisions could not be removed.';
+            }
+            if (!$this->removeOwnedTree($quarantine)) {
+                $warnings[] = 'The quarantined theme files could not be removed and require administrator cleanup.';
+            }
+            $result = ['success' => true, 'folder' => $folder];
+            if ($warnings !== []) $result['warning'] = implode(' ', $warnings);
+            return $result;
+        } catch (Throwable $error) {
+            if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+            if (!$committed && $quarantine !== '' && is_array($rootIdentity)
+                && !file_exists($root) && !is_link($root)) {
+                $quarantineIdentity = @lstat($quarantine);
+                if (is_array($quarantineIdentity) && $this->sameDirectory($rootIdentity, $quarantineIdentity)) {
+                    @rename($quarantine, $root);
+                    $this->syncDirectory($this->themesRoot());
+                }
+            }
+            return ['success' => false, 'error' => $this->safeError($error)];
+        } finally {
+            $this->releaseLocks($locks);
+            $this->releaseCoreLocks($coreLocks);
+        }
+    }
+
     public function savePhp(string $folder, string $fileId, string $content, string $expectedHash, int $actorId, string $note = ''): array
     {
         return $this->replacePhp($folder, $fileId, $content, $expectedHash, $actorId, $note, false, '', [], 'save', null);

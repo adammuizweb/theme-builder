@@ -125,6 +125,24 @@ $renderForkModal = static function () use ($base, $selfUrl, $csrfToken, $forkReq
       submit.textContent = <?= json_encode(__('Create Inactive Fork')) ?>;
     });
   });
+  document.querySelectorAll('[data-tb-delete-fork]').forEach(function(button) {
+    button.addEventListener('click', function() {
+      var folder = this.dataset.tbDeleteFork || '';
+      if (!folder || !confirm(<?= json_encode(__('Delete this inactive managed fork, its revisions, and Theme Zone data? This cannot be undone.')) ?>)) return;
+      button.disabled = true;
+      var data = new FormData();
+      data.append('csrf_token', <?= json_encode($csrfToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>);
+      data.append('theme', folder);
+      fetch(<?= json_encode($base . '/?action=api&page=admin/tools/theme-builder/api/delete_fork') ?>, { method: 'POST', body: data })
+      .then(function(response) { return response.json(); })
+      .then(function(result) {
+        if (!result.success) throw new Error(result.error || <?= json_encode(__('Managed fork deletion failed.')) ?>);
+        if (result.warning) alert(result.warning);
+        window.location.href = <?= json_encode($selfUrl) ?>;
+      })
+      .catch(function(error) { alert(error.message); button.disabled = false; });
+    });
+  });
 })();
 </script>
 <?php
@@ -152,7 +170,7 @@ if ($folder === ''):
   <?php else: ?>
     <div class="tb-theme-grid">
       <?php foreach ($themes as $theme): ?>
-        <?php $dirty = $theme['inspectable'] ? $forkService->dirtyState((string)$theme['folder']) : ['tracked' => false]; ?>
+        <?php $dirty = $theme['inspectable'] ? $forkService->dirtyState((string)$theme['folder']) : ['tracked' => false]; $managed = $forkService->forkState((string)$theme['folder']); ?>
         <article class="tb-theme-card <?= !$theme['inspectable'] ? 'tb-theme-card-error' : '' ?>">
           <div class="tb-theme-card-header">
             <h4><?= h($theme['name']) ?></h4>
@@ -183,6 +201,7 @@ if ($folder === ''):
               <a class="btn btn-sm btn-primary" href="<?= h($selfUrl . '&theme=' . rawurlencode($theme['folder'])) ?>"><?= __('Inspect Source') ?></a>
               <button type="button" class="btn btn-sm btn-outline" data-tb-fork data-source="<?= h($theme['folder']) ?>" data-name="<?= h($theme['name']) ?>"><?= __('Fork & Edit') ?></button>
               <?php $renderExportForm((string)$theme['folder']); ?>
+              <?php if ($managed['managed']): ?><button type="button" class="btn btn-sm btn-danger" data-tb-delete-fork="<?= h($theme['folder']) ?>" <?= $managed['editable'] ? '' : 'disabled' ?>><?= __('Delete Fork') ?></button><?php endif; ?>
             </div>
           <?php else: ?>
             <p class="tb-inspector-error"><?= h((string)$theme['error']) ?></p>
@@ -284,6 +303,7 @@ $fileUrl = static function (string $id) use ($selfUrl, $folder): string {
       <?php endif; ?>
       <button type="button" class="btn btn-sm btn-outline" data-tb-fork data-source="<?= h($theme['folder']) ?>" data-name="<?= h($theme['name']) ?>"><?= __('Fork & Edit') ?></button>
       <?php $renderExportForm($folder); ?>
+      <?php if ($forkState['managed']): ?><button type="button" class="btn btn-sm btn-danger" data-tb-delete-fork="<?= h($folder) ?>" <?= $forkState['editable'] ? '' : 'disabled' ?>><?= __('Delete Fork') ?></button><?php endif; ?>
     </div>
   </div>
 
