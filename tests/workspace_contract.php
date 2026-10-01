@@ -49,6 +49,20 @@ try {
     $themeDir = ThemeWorkspace::themeDir('safe-theme');
     $check(is_dir($themeDir) && dirname((string)realpath($themeDir)) === $base, 'draft resolves directly below workspace');
     $check(ThemeWorkspace::isComplete($themeDir), 'created draft contains every required slot');
+    $starterManifest = ThemeWorkspace::readManifest('safe-theme');
+    $check(isset($starterManifest['layout']['header']['positions']['logo'], $starterManifest['layout']['footer']['positions']['copyright'],
+        $starterManifest['layout']['main.homepage']['positions']['before'], $starterManifest['layout']['list.post']['positions']['before_loop'],
+        $starterManifest['layout']['single.post']['positions']['before_content']),
+        'starter manifest declares useful shell, homepage, and representative content positions');
+    $starterSources = implode("\n", array_map(static fn(string $path): string => (string)file_get_contents($themeDir . '/' . $path), [
+        'header.php', 'footer.php', 'main/homepage.php', 'main/list/post.php', 'main/single/post.php',
+    ]));
+    $check(str_contains($starterSources, 'theme_zone_has_position') && str_contains($starterSources, 'theme_zone_render_position'),
+        'starter templates use fallback-aware Theme Zone rendering');
+    $sidebarSource = (string)file_get_contents($themeDir . '/sidebar.php');
+    $check(str_contains($sidebarSource, 'render_sidebar_widgets($pdo)') && str_contains($sidebarSource, "widget('search_form'"),
+        'starter preserves managed sidebar rendering before generic widget fallbacks');
+    $check(!file_exists($themeDir . '/theme.php'), 'starter omits an output-free root entry point when it has no useful registration');
 
     $headerBefore = ThemeWorkspace::readFile('safe-theme', 'header');
     $headerHash = ThemeWorkspace::fileHash('safe-theme', 'header');

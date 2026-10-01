@@ -208,8 +208,13 @@ final class InstalledThemeInspector
     {
         $slot = array_search($path, ThemeWorkspace::slotFiles(), true);
         if ($slot !== false) return ['category' => 'slot', 'label' => 'Canonical Slot', 'slot' => $slot];
-        if (str_starts_with($path, 'partials/shortcodes/section/')) return ['category' => 'section-wrapper', 'label' => 'Theme Section Wrapper', 'slot' => null];
-        if (str_starts_with($path, 'main/sections/')) return ['category' => 'section', 'label' => 'Theme Section', 'slot' => null];
+        if (preg_match('#\Apartials/shortcodes/section/[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*\.php\z#D', $path) === 1) {
+            return ['category' => 'theme-section', 'label' => 'Theme Section', 'slot' => null];
+        }
+        if (preg_match('#\Apartials/shortcodes/post_cat/[a-z0-9_-]{1,40}\.php\z#D', $path) === 1) {
+            return ['category' => 'collection-layout', 'label' => 'Collection Layout', 'slot' => null];
+        }
+        if (str_starts_with($path, 'main/sections/')) return ['category' => 'legacy-section-leaf', 'label' => 'Legacy Theme Section Leaf', 'slot' => null];
         if (str_starts_with($path, 'partials/shortcodes/')) return ['category' => 'shortcode', 'label' => 'Shortcode Partial', 'slot' => null];
         if (str_starts_with($path, 'partials/')) return ['category' => 'partial', 'label' => 'Partial', 'slot' => null];
         if (str_starts_with($path, 'helpers/')) return ['category' => 'helper', 'label' => 'Helper', 'slot' => null];

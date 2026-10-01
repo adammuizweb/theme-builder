@@ -152,7 +152,12 @@ $themes = ThemeWorkspace::listThemes();
       fetch(base + '/?action=api&page=admin/tools/theme-builder/api/install_theme', { method: 'POST', body: fd })
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        if (data.success) { alert('<?= __('Theme installed! Go to Themes to activate it.') ?>'); }
+        if (data.success) {
+          if (confirm('<?= __('Theme installed. Open Theme Manager & Assignments?') ?>')) {
+            window.location.href = base + '/?page=admin/themes/assign';
+            return;
+          }
+        }
         else { alert(data.error || 'Install failed.'); }
         self.disabled = false;
       })

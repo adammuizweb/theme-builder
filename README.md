@@ -8,7 +8,7 @@ tracks fork provenance, and links related owner workspaces.
 Installed-theme PHP inspection, direct editing, revisions, baselines, exports,
 and Store update protection are owned by Jyavani Core.
 
-Theme Builder 1.8.1 uses the native theme source editor introduced in Jyavani
+Theme Builder 1.8.2 uses the native theme source editor introduced in Jyavani
 Core 2.3.164. Install or update Core first; activation remains blocked on older
 Core versions rather than restoring the former duplicate installed-source editor.
 
@@ -85,10 +85,17 @@ Core's native editor is available at `admin/themes/source` with the registered
 `folder` query parameter. Core provides inspection, direct editing, revisions,
 restore, dirty-state reporting, and source export there.
 
-Theme Section owner navigation reads bounded wrapper bytes through Core's
-`ThemeSourceService::source()` and resolves literal local dependencies against
-opaque identities from Core's inventory. Theme Builder does not scan
-`VIEWS_BASE`, execute source, or accept browser filesystem paths.
+Theme Section files are direct renderers. For the active theme, owner navigation
+opens Core's Theme Section editor; inactive themes use Core's opaque source
+editor. Bounded literal dependencies on legacy `main/sections` leaves are shown
+only as compatibility information.
+
+Theme-owned Collection Layouts under `partials/shortcodes/post_cat` preserve
+their `theme` owner and exact theme identity. Active-theme layouts open Core's
+Collection Layout editor; inactive layouts use opaque Core source identities.
+No raw filesystem path is accepted in navigation. Draft Collection Layout and
+Theme Section authoring is intentionally unsupported in Theme Builder; its
+draft editor remains limited to canonical slots and allowlisted assets.
 
 ## Fork And Edit
 
@@ -111,6 +118,11 @@ Theme Builder contributes a monotonic `theme_source_edit_policy` filter. It can
 deny Core `edit`, `save`, and `restore` operations for managed forks that are
 active, assigned, or whose provenance cannot be verified. It never reverses an
 earlier denial and does not claim Store baseline ownership.
+
+Theme Builder also contributes a monotonic `theme_delete_preflight` filter.
+Core Theme Manager deletion is denied for every managed-fork marker, including
+malformed provenance, with guidance to use Theme Builder deletion. The
+preflight performs no cleanup or mutation.
 
 Theme Builder contributes one purple, owner-labelled action group containing
 `Fork & Edit` and `Owner Workspaces` to Core Theme Manager cards through

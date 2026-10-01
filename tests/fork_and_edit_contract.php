@@ -10,6 +10,12 @@ define('VIEWS_BASE', $themesRoot);
 define('DEFAULT_THEME_FOLDER', 'default');
 define('THEME_BUILDER_WORKSPACE', $workspace);
 
+function theme_lifecycle_lock_keys(array $folders = []): array
+{
+    $GLOBALS['_theme_lifecycle_key_calls'][] = $folders;
+    return array_merge(['0-theme-lifecycle'], $folders);
+}
+
 function theme_operation_acquire(array $folders): array
 {
     $folders = array_values(array_unique($folders));
@@ -301,7 +307,9 @@ JSON;
     $check(($events[0] ?? null) === ['acquire', ['0-theme-lifecycle', 'SOURCE', 'wrong-case-fork']]
         && in_array(['acquire', ['0-theme-lifecycle', 'residual-fork', 'source']], $events, true)
         && in_array(['acquire', ['0-theme-lifecycle', 'source', 'source-fork']], $events, true)
-        && ($events[count($events) - 1][0] ?? '') === 'release', 'fork publication acquires sorted Core folders and releases the Core lock last');
+        && ($events[count($events) - 1][0] ?? '') === 'release'
+        && ($GLOBALS['_theme_lifecycle_key_calls'][0] ?? null) === ['SOURCE', 'wrong-case-fork'],
+        'fork publication derives lifecycle keys from Core, sorts them, and releases the Core lock last');
 } catch (Throwable $error) {
     $failures[] = 'unexpected exception: ' . $error->getMessage();
     echo 'FAIL unexpected exception: ' . $error->getMessage() . PHP_EOL;

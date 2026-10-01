@@ -4,12 +4,18 @@ $siteDesc  = $site['description'] ?? '';
 $baseUrl   = rtrim($site['url'] ?? '/', '/');
 $homeUrl   = $baseUrl ?: '/';
 ?>
+<?php if (function_exists('theme_zone_has_position') && theme_zone_has_position($pdo, 'main.homepage', 'before')): ?>
+  <?= theme_zone_render_position($pdo, 'main.homepage', 'before') ?>
+<?php endif; ?>
 <section class="hero">
   <div class="hero-inner">
     <h1><?= htmlspecialchars($siteTitle, ENT_QUOTES, 'UTF-8') ?></h1>
     <?php if ($siteDesc !== ''): ?><p><?= htmlspecialchars($siteDesc, ENT_QUOTES, 'UTF-8') ?></p><?php endif; ?>
   </div>
 </section>
+<?php if (function_exists('theme_zone_has_position') && theme_zone_has_position($pdo, 'main.homepage', 'after')): ?>
+  <?= theme_zone_render_position($pdo, 'main.homepage', 'after') ?>
+<?php endif; ?>
 <section class="post-list">
   <h2><?= __('Latest Posts') ?></h2>
   <?php if (!empty($posts) && is_array($posts)): ?>

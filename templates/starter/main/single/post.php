@@ -29,7 +29,13 @@ $siteTitleJson = $site['title'] ?? 'My Site';
       <span><?= sprintf(__('%d min read'), $readTime) ?></span>
     </div>
   </header>
+  <?php if (function_exists('theme_zone_has_position') && theme_zone_has_position($pdo, 'single.post', 'before_content')): ?>
+    <?= theme_zone_render_position($pdo, 'single.post', 'before_content') ?>
+  <?php endif; ?>
   <?php if ($thumbUrl): ?><figure class="post-thumbnail"><img src="<?= htmlspecialchars($thumbUrl, ENT_QUOTES, 'UTF-8') ?>" alt="<?= htmlspecialchars($post['title'] ?? '', ENT_QUOTES, 'UTF-8') ?>" loading="lazy"></figure><?php endif; ?>
   <div class="post-body"><?= apply_filters('post_content', (string)($post['content'] ?? ''), $post ?? []) ?></div>
+  <?php if (function_exists('theme_zone_has_position') && theme_zone_has_position($pdo, 'single.post', 'after_content')): ?>
+    <?= theme_zone_render_position($pdo, 'single.post', 'after_content') ?>
+  <?php endif; ?>
   <footer class="post-footer"><a href="/" class="btn-back">&larr; <?= __('Home') ?></a></footer>
 </article>

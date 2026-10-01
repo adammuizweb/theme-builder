@@ -5,6 +5,9 @@ $pagination = $pagination ?? '';
 ?>
 <div class="content-area">
   <header class="content-header"><h1><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></h1></header>
+  <?php if (function_exists('theme_zone_has_position') && theme_zone_has_position($pdo, 'list.post', 'before_loop')): ?>
+    <?= theme_zone_render_position($pdo, 'list.post', 'before_loop') ?>
+  <?php endif; ?>
   <?php if (!empty($posts)): ?>
     <div class="post-list">
       <?php foreach ($posts as $p):
@@ -24,5 +27,8 @@ $pagination = $pagination ?? '';
     <?php if ($pagination): ?><nav class="pagination"><?= $pagination ?></nav><?php endif; ?>
   <?php else: ?>
     <p class="empty"><?= __('No posts yet.') ?></p>
+  <?php endif; ?>
+  <?php if (function_exists('theme_zone_has_position') && theme_zone_has_position($pdo, 'list.post', 'after_loop')): ?>
+    <?= theme_zone_render_position($pdo, 'list.post', 'after_loop') ?>
   <?php endif; ?>
 </div>

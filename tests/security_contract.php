@@ -16,8 +16,8 @@ try {
 }
 
 $check(($manifest['name'] ?? null) === 'theme-builder', 'manifest identity is theme-builder');
-$check(($manifest['version'] ?? null) === '1.8.1' && ($manifest['requires']['jyavani'] ?? null) === '>=2.3.164',
-    'manifest releases Theme Builder 1.8.1 with the Core source-service floor');
+$check(($manifest['version'] ?? null) === '1.8.2' && ($manifest['requires']['jyavani'] ?? null) === '>=2.3.164',
+    'manifest releases Theme Builder 1.8.2 with the Core source-service floor');
 $check(in_array('tokenizer', $manifest['requires']['extensions'] ?? [], true),
     'manifest declares tokenizer for bounded Core-source dependency navigation');
 $check(!array_key_exists('permissions', $manifest), 'manifest declares no delegated Theme Builder permissions');
@@ -98,24 +98,29 @@ $check(str_contains($installed, 'No database Theme Templates were found.')
     && str_contains($installed, 'Showing the first 200 Theme Templates.')
     && str_contains($installed, 'Content Translation is unavailable')
     && str_contains($installed, 'Not started')
-    && str_contains($installed, 'No local literal leaf dependency detected.'),
+    && str_contains($installed, 'No bounded legacy main/sections dependency detected.')
+    && str_contains($installed, 'Draft Collection Layout and Theme Section authoring is not supported'),
     'Owner Workspaces UI retains empty, status, error, and truncation messaging');
 $check(str_contains($installed, 'page=admin/themes/source&folder=') && str_contains($installed, 'Open Core Source Editor')
     && !str_contains($installed, 'CodeMirror') && !str_contains($installed, '<textarea'),
     'installed source inspection and editing link to Core rather than rendering a plugin editor');
 
-$check(substr_count($integration, "add_action('") + substr_count($integration, "add_filter('") === 3
+$check(substr_count($integration, "add_action('") + substr_count($integration, "add_filter('") === 4
     && str_contains($integration, "add_action('theme_source_editor_actions'")
     && str_contains($integration, "add_action('theme_manager_theme_actions'")
     && str_contains($integration, "add_filter('theme_source_edit_policy'")
+    && str_contains($integration, "add_filter('theme_delete_preflight'")
     && !str_contains($integration, "], 10, 3)") && !str_contains($integration, "], 10, 4)"),
-    'integration registers exactly three hooks through Core\'s three-argument API');
+    'integration registers exactly four hooks through Core\'s three-argument API');
 foreach (['theme_update_preflight', 'theme_update_completed', 'theme_install_completed', 'plugin_state_change_preflight'] as $hook) {
     $check(!str_contains($integration, $hook), "integration has no {$hook} ownership");
 }
 $check(str_contains($integration, "['edit', 'save', 'restore']")
     && str_contains($integration, 'if (!$allowed) return') && str_contains($integration, 'managedEditPolicy($folder)'),
     'managed-fork Core policy is operation-bounded, monotonic, and provenance-backed');
+$check(str_contains($integration, 'hasManagedForkMarker($folder)')
+    && str_contains($forkService, 'public function hasManagedForkMarker('),
+    'managed-fork deletion preflight uses read-only provenance marker detection');
 $check(str_contains($integration, 'Fork & Edit') && str_contains($integration, 'Owner Workspaces')
     && !str_contains($integration, 'Export PHP') && !str_contains($integration, 'Inspect PHP'),
     'Core surfaces receive only fork and owner navigation actions');
@@ -131,16 +136,18 @@ $check(str_contains($integration, 'tm-action-group--theme-builder')
     && str_contains($builderCss, 'html.theme-dark .theme-source-action-group--theme-builder')
     && !str_contains($builderCss, '.tb-core-source-action'),
     'Theme Builder owner groups remain visually distinct from Core on both surfaces in light and dark themes');
-$check(str_contains((string)file_get_contents($root . '/plugin.json'), 'theme-builder.css?v=1.8.1'),
+$check(str_contains((string)file_get_contents($root . '/plugin.json'), 'theme-builder.css?v=1.8.2'),
     'changed owner-action stylesheet uses a cache-distinct asset URL');
 
 $check(str_contains($inspector, 'theme_source_service($this->pdo)')
     && !str_contains($inspector, 'RecursiveDirectoryIterator') && !str_contains($inspector, 'VIEWS_BASE'),
     'installed navigation consumes Core inventory with no plugin filesystem fallback');
 $check(str_contains($navigator, "page=admin/themes/source&folder=")
-    && str_contains($navigator, 'literalDependencies($folder, $wrapperIds)')
+    && str_contains($navigator, 'literalDependencies($folder, $rendererIds)')
+    && str_contains($navigator, "'scope' => 'section'")
+    && str_contains($navigator, "'source' => 'theme'")
     && str_contains($inspector, 'token_get_all($source)') && str_contains($inspector, 'MAX_DEPENDENCY_TOTAL_BYTES'),
-    'owner dependency navigation uses bounded Core source bytes and native opaque links');
+    'owner navigation uses dedicated Core editors plus bounded opaque compatibility links');
 $check(str_contains($forkService, 'assertCoreInventoryAvailable($sourceFolder)')
     && str_contains($forkService, 'theme_source_service($this->pdo)'),
     'complete fork creation requires Core installed-source inventory');
@@ -155,7 +162,7 @@ $check(!str_contains($forkService, "privateDirectory('.baselines')")
 $check(str_contains($installed, 'Legacy Theme Builder revision data is retained')
     && str_contains($readme, 'Existing legacy') && str_contains($readme, 'left untouched'),
     'legacy baseline and revision retention is explicit');
-$check(str_contains($readme, 'Theme Builder 1.8.1') && str_contains($readme, 'Core 2.3.164'),
+$check(str_contains($readme, 'Theme Builder 1.8.2') && str_contains($readme, 'Core 2.3.164'),
     'README documents the released Core and Theme Builder compatibility pair');
 $check(version_compare('2.3.163', substr((string)$manifest['requires']['jyavani'], 2), '<')
     && str_contains($readme, 'activation remains blocked on older'),
@@ -195,10 +202,12 @@ foreach (['fork_theme.php' => '->fork(', 'delete_fork.php' => '->deleteFork('] a
         "{$file} keeps Site Owner, POST, and CSRF checks before fork mutation");
 }
 
-$check(str_contains($forkService, "acquireCoreLocks(['0-theme-lifecycle'")
+$check(!str_contains($forkService, "'0-theme-lifecycle'")
+    && str_contains($forkService, "function_exists('theme_lifecycle_lock_keys')")
+    && str_contains($forkService, 'theme_lifecycle_lock_keys(')
     && str_contains($forkService, 'package_publication_recovery_paths($target)')
     && str_contains($forkService, 'scanTree($sourceRoot)') && str_contains($forkService, 'assertForkSnapshot('),
-    'complete physical forks retain Core locking, recovery checks, bounded copy, and verification');
+    'complete physical forks derive locks from Core and retain recovery checks, bounded copy, and verification');
 $check(str_contains($forkService, 'SET TRANSACTION ISOLATION LEVEL SERIALIZABLE')
     && str_contains($forkService, 'SELECT id FROM assignments WHERE theme_id = ? ORDER BY id')
     && str_contains($forkService, 'assertManagedRootIdentity($root, $metadata)'),

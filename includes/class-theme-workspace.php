@@ -197,6 +197,23 @@ class ThemeWorkspace
                 'color_mode' => $colorMode,
                 'styles' => ['assets/css/style.css', 'assets/css/blocks.css'],
                 'scripts' => ['assets/js/script.js'],
+                'layout' => [
+                    'header' => ['label' => 'Header', 'columns' => 3, 'positions' => [
+                        'logo' => ['label' => 'Logo'], 'nav' => ['label' => 'Navigation'], 'controls' => ['label' => 'Controls'],
+                    ]],
+                    'footer' => ['label' => 'Footer', 'positions' => [
+                        'copyright' => ['label' => 'Copyright'],
+                    ]],
+                    'main.homepage' => ['label' => 'Homepage', 'positions' => [
+                        'before' => ['label' => 'Before content'], 'after' => ['label' => 'After content'],
+                    ]],
+                    'list.post' => ['label' => 'Post List', 'positions' => [
+                        'before_loop' => ['label' => 'Before list'], 'after_loop' => ['label' => 'After list'],
+                    ]],
+                    'single.post' => ['label' => 'Single Post', 'positions' => [
+                        'before_content' => ['label' => 'Before content'], 'after_content' => ['label' => 'After content'],
+                    ]],
+                ],
             ];
             self::writeNewFile($stage . '/theme.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL, 0660);
             self::lintPhpTree($stage);

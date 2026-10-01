@@ -80,8 +80,8 @@ try {
     foreach ($inspection['files'] as $file) $files[$file['path']] = $file;
     $check(($files['header.php']['id'] ?? null) === $headerId && ($files['header.php']['category'] ?? null) === 'slot'
         && ($files['header.php']['slot'] ?? null) === 'header', 'Core file records are normalized for owner navigation');
-    $check(($files['partials/shortcodes/section/hero.php']['category'] ?? null) === 'section-wrapper',
-        'Core inventory paths retain Theme Builder navigation classification');
+    $check(($files['partials/shortcodes/section/hero.php']['category'] ?? null) === 'theme-section',
+        'Core inventory classifies Theme Section files as direct renderers');
     $check(array_filter($service->calls, static fn(array $call): bool => $call === ['inventory', 'apu']) !== [],
         'installed inventory is obtained from theme_source_service');
 

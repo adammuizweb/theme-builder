@@ -6,6 +6,7 @@ $root = sys_get_temp_dir() . '/theme-builder-owner-navigation-' . bin2hex(random
 $themesRoot = $root . '/themes';
 mkdir($themesRoot . '/active/partials/shortcodes/section', 0770, true);
 mkdir($themesRoot . '/active/main/sections', 0770, true);
+mkdir($themesRoot . '/active/partials/shortcodes/post_cat', 0770, true);
 define('VIEWS_BASE', $themesRoot);
 define('DEFAULT_THEME_FOLDER', 'active');
 
@@ -99,12 +100,14 @@ final class ThemeSourceService
         $wrapper = "<?php\nrequire __DIR__ . '/../../../main/sections/hero.php';\n";
         $leaf = "<?php echo 'hero';\n";
         $homepage = "<?php echo 'homepage';\n";
+        $collection = "<?php echo 'cards';\n";
         return ['theme' => [
             'id' => 1, 'folder' => $folder, 'active' => true, 'assigned' => true, 'store' => false, 'system' => true,
         ], 'files' => [
             ['id' => hash('sha256', 'wrapper'), 'path' => 'partials/shortcodes/section/hero.php', 'size' => strlen($wrapper), 'sha256' => hash('sha256', $wrapper)],
             ['id' => hash('sha256', 'leaf'), 'path' => 'main/sections/hero.php', 'size' => strlen($leaf), 'sha256' => hash('sha256', $leaf)],
             ['id' => hash('sha256', 'homepage'), 'path' => 'main/homepage.php', 'size' => strlen($homepage), 'sha256' => hash('sha256', $homepage)],
+            ['id' => hash('sha256', 'collection'), 'path' => 'partials/shortcodes/post_cat/cards.php', 'size' => strlen($collection), 'sha256' => hash('sha256', $collection)],
         ]];
     }
 
@@ -152,6 +155,7 @@ try {
         "<?php\nrequire __DIR__ . '/../../../main/sections/hero.php';\n");
     file_put_contents($themesRoot . '/active/main/sections/hero.php', "<?php echo 'hero';\n");
     file_put_contents($themesRoot . '/active/main/homepage.php', "<?php echo 'homepage';\n");
+    file_put_contents($themesRoot . '/active/partials/shortcodes/post_cat/cards.php', "<?php echo 'cards';\n");
     $wrapperHash = hash_file('sha256', $themesRoot . '/active/partials/shortcodes/section/hero.php');
     $leafHash = hash_file('sha256', $themesRoot . '/active/main/sections/hero.php');
 
@@ -258,12 +262,23 @@ try {
     $check(count($sections) === 1
         && ($sections[0]['path'] ?? null) === 'partials/shortcodes/section/hero.php'
         && ($sections[0]['dependencies'][0]['path'] ?? null) === 'main/sections/hero.php',
-        'Theme Section wrapper maps its literal local leaf through Core source bytes and inventory identity');
-    $check(str_contains((string)$sections[0]['url'], 'page=admin/themes/source')
-        && str_contains((string)$sections[0]['url'], 'folder=active') && str_contains((string)$sections[0]['url'], 'file=')
+        'Theme Section renderer retains bounded legacy leaf compatibility reporting');
+    $check(str_contains((string)$sections[0]['url'], 'page=admin%2Fshortcodes%2Flayout')
+        && str_contains((string)$sections[0]['url'], 'scope=section') && str_contains((string)$sections[0]['url'], 'file=hero.php')
         && str_contains((string)$sections[0]['dependencies'][0]['url'], 'page=admin/themes/source')
         && str_contains((string)$sections[0]['dependencies'][0]['url'], 'folder=active'),
-        'wrapper and leaf navigation use Core native source URLs and opaque identities');
+        'active renderer uses Core Theme Section editor while legacy leaf uses an opaque source identity');
+    $collections = $available['collection_layouts'];
+    $check(count($collections['items']) === 1
+        && ($collections['items'][0]['name'] ?? null) === 'cards'
+        && ($collections['items'][0]['owner'] ?? null) === 'theme'
+        && ($collections['items'][0]['theme_folder'] ?? null) === 'active'
+        && str_contains((string)$collections['items'][0]['url'], 'scope=collection')
+        && str_contains((string)$collections['items'][0]['url'], 'source=theme')
+        && str_contains((string)$collections['items'][0]['url'], 'theme_folder=active')
+        && !str_contains((string)$collections['items'][0]['url'], 'partials%2Fshortcodes')
+        && $collections['draft_authoring'] === false,
+        'theme Collection Layout navigation preserves owner identity without exposing a raw path');
 
     $inactiveInspection = $inspection;
     $inactiveInspection['theme']['active'] = false;
@@ -273,6 +288,9 @@ try {
         && ($inactive['templates']['items'][0]['translations'] ?? null) === []
         && $GLOBALS['_tb_owner_ct_package_calls'] === $ctPackageCallsBeforeInactive,
         'inactive physical themes never resolve or inspect active-theme translation packages');
+    $check(str_contains((string)$inactive['sections']['items'][0]['url'], 'page=admin/themes/source')
+        && str_contains((string)$inactive['collection_layouts']['items'][0]['url'], 'page=admin/themes/source'),
+        'inactive Theme Sections and Collection Layouts use Core opaque source navigation');
 
     $GLOBALS['_tb_owner_ct_folder'] = 'another-theme';
     $ownerMismatch = $navigator->relationships('active', $inspection, '/owner');

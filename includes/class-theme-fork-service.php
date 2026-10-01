@@ -44,7 +44,7 @@ final class ThemeForkService
         try {
             $base = $this->themesRoot();
             $target = $base . DIRECTORY_SEPARATOR . $targetFolder;
-            $coreLocks = $this->acquireCoreLocks(['0-theme-lifecycle', $sourceFolder, $targetFolder]);
+            $coreLocks = $this->acquireCoreLocks([$sourceFolder, $targetFolder]);
             if (!function_exists('package_publication_recovery_paths')) {
                 throw new RuntimeException('Core package publication recovery checks are unavailable.');
             }
@@ -199,6 +199,25 @@ final class ThemeForkService
         return ['allowed' => (bool)$state['editable'], 'message' => (string)$state['reason']];
     }
 
+    public function hasManagedForkMarker(string $folder): bool
+    {
+        if (!ThemeWorkspace::isValidSlug($folder)) return false;
+        $configured = defined('THEME_BUILDER_WORKSPACE') ? (string)THEME_BUILDER_WORKSPACE : '';
+        $base = $configured !== '' ? $configured : dirname(__DIR__, 3) . '/cfg/var/theme-builder';
+        if (!file_exists($base) && !is_link($base)) return false;
+        if (is_link($base) || !is_dir($base)) throw new RuntimeException('Theme Builder provenance storage is unsafe.');
+        $baseReal = realpath($base);
+        if ($baseReal === false) throw new RuntimeException('Theme Builder provenance storage is unavailable.');
+
+        $directory = $baseReal . '/.installed-forks';
+        if (!file_exists($directory) && !is_link($directory)) return false;
+        if (is_link($directory) || !is_dir($directory) || dirname((string)realpath($directory)) !== $baseReal) {
+            throw new RuntimeException('Theme Builder provenance storage is unsafe.');
+        }
+        $path = $directory . '/' . hash('sha256', $folder) . '.json';
+        return file_exists($path) || is_link($path);
+    }
+
     public function deleteFork(string $folder): array
     {
         if (!ThemeWorkspace::isValidSlug($folder)) return ['success' => false, 'error' => 'Invalid managed fork folder.'];
@@ -209,7 +228,7 @@ final class ThemeForkService
         $rootIdentity = null;
         $committed = false;
         try {
-            $coreLocks = $this->acquireCoreLocks(['0-theme-lifecycle', $folder]);
+            $coreLocks = $this->acquireCoreLocks([$folder]);
             $locks = $this->acquireLocks(['installed:' . $folder]);
             $root = $this->themeRoot($folder);
             if (function_exists('package_publication_recovery_paths') && package_publication_recovery_paths($root) !== []) {
@@ -669,12 +688,15 @@ final class ThemeForkService
 
     private function acquireCoreLocks(array $folders): array
     {
-        if (!function_exists('theme_operation_acquire') || !function_exists('theme_operation_release')) {
+        if (!function_exists('theme_lifecycle_lock_keys') || !function_exists('theme_operation_acquire')
+            || !function_exists('theme_operation_release')) {
             throw new RuntimeException('Core theme operation locking is unavailable.');
         }
-        $folders = array_values(array_unique($folders));
-        sort($folders, SORT_STRING);
-        return theme_operation_acquire($folders);
+        $keys = theme_lifecycle_lock_keys(array_values(array_unique($folders)));
+        if (!is_array($keys) || $keys === []) throw new RuntimeException('Core theme lifecycle lock keys are unavailable.');
+        $keys = array_values(array_unique($keys));
+        sort($keys, SORT_STRING);
+        return theme_operation_acquire($keys);
     }
 
     private function releaseCoreLocks(array $locks): void

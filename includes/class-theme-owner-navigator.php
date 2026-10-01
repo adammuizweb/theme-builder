@@ -26,7 +26,8 @@ final class ThemeOwnerNavigator
         return [
             'templates' => $this->templates($folder, !empty($theme['active']), $base, $returnUrl),
             'theme_files' => $this->themeFiles($folder, $inspection, $base, $returnUrl),
-            'sections' => $this->sections($folder, $inspection, $base),
+            'sections' => $this->sections($folder, $inspection, $base, !empty($theme['active']), $returnUrl),
+            'collection_layouts' => $this->collectionLayouts($folder, $inspection, $base, !empty($theme['active']), $returnUrl),
         ];
     }
 
@@ -193,17 +194,17 @@ final class ThemeOwnerNavigator
         }
     }
 
-    private function sections(string $folder, array $inspection, string $base): array
+    private function sections(string $folder, array $inspection, string $base, bool $activeTheme, string $returnUrl): array
     {
         $files = is_array($inspection['files'] ?? null) ? $inspection['files'] : [];
         $inspector = new InstalledThemeInspector($this->pdo);
-        $wrapperIds = [];
+        $rendererIds = [];
         foreach ($files as $file) {
-            if (is_array($file) && ($file['category'] ?? null) === 'section-wrapper'
-                && is_string($file['id'] ?? null)) $wrapperIds[] = $file['id'];
+            if (is_array($file) && ($file['category'] ?? null) === 'theme-section'
+                && is_string($file['id'] ?? null)) $rendererIds[] = $file['id'];
         }
         try {
-            $dependencyMap = $inspector->literalDependencies($folder, $wrapperIds);
+            $dependencyMap = $inspector->literalDependencies($folder, $rendererIds);
         } catch (Throwable $error) {
             $dependencyMap = [];
             error_log('[theme-builder-owner-navigation] Theme Section dependency lookup failed: ' . $error->getMessage());
@@ -211,11 +212,18 @@ final class ThemeOwnerNavigator
         $items = [];
 
         foreach ($files as $file) {
-            if (!is_array($file) || ($file['category'] ?? null) !== 'section-wrapper') continue;
+            if (!is_array($file) || ($file['category'] ?? null) !== 'theme-section') continue;
             $fileId = is_string($file['id'] ?? null) ? $file['id'] : '';
+            $name = basename((string)($file['path'] ?? ''), '.php');
             $record = [
                 'path' => (string)($file['path'] ?? ''),
-                'url' => $this->sourceUrl($base, $folder, $fileId),
+                'owner' => 'theme',
+                'url' => $activeTheme
+                    ? $base . '/?' . http_build_query([
+                        'page' => 'admin/shortcodes/layout', 'scope' => 'section',
+                        'file' => $name . '.php', 'return_to' => $returnUrl,
+                    ])
+                    : $this->sourceUrl($base, $folder, $fileId),
                 'dependencies' => [],
                 'scanned' => false,
                 'scan_reason' => null,
@@ -223,7 +231,7 @@ final class ThemeOwnerNavigator
             ];
             try {
                 $dependencyState = $dependencyMap[$fileId] ?? null;
-                if (!is_array($dependencyState)) throw new RuntimeException('Theme Section wrapper source is unavailable.');
+                if (!is_array($dependencyState)) throw new RuntimeException('Theme Section renderer source is unavailable.');
                 $record['scanned'] = !empty($dependencyState['scanned']);
                 $record['scan_reason'] = is_string($dependencyState['reason'] ?? null) ? $dependencyState['reason'] : null;
                 foreach ((array)($dependencyState['dependencies'] ?? []) as $dependency) {
@@ -241,7 +249,29 @@ final class ThemeOwnerNavigator
             $items[] = $record;
         }
 
-        return ['items' => $items];
+        return ['items' => $items, 'active_theme' => $activeTheme];
+    }
+
+    private function collectionLayouts(string $folder, array $inspection, string $base, bool $activeTheme, string $returnUrl): array
+    {
+        $items = [];
+        foreach ((array)($inspection['files'] ?? []) as $file) {
+            if (!is_array($file) || ($file['category'] ?? null) !== 'collection-layout'
+                || !is_string($file['id'] ?? null)) continue;
+            $name = basename((string)($file['path'] ?? ''), '.php');
+            $items[] = [
+                'name' => $name,
+                'owner' => 'theme',
+                'theme_folder' => $folder,
+                'url' => $activeTheme
+                    ? $base . '/?' . http_build_query([
+                        'page' => 'admin/shortcodes/layout', 'scope' => 'collection', 'source' => 'theme',
+                        'theme_folder' => $folder, 'file' => $name . '.php', 'return_to' => $returnUrl,
+                    ])
+                    : $this->sourceUrl($base, $folder, $file['id']),
+            ];
+        }
+        return ['items' => $items, 'active_theme' => $activeTheme, 'draft_authoring' => false];
     }
 
     private function themeFiles(string $folder, array $inspection, string $base, string $returnUrl): array

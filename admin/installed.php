@@ -279,19 +279,19 @@ try {
       <article class="tb-owner-card">
         <header><div><span><?= __('Physical PHP source') ?></span><h5><?= __('Theme Sections') ?></h5></div><strong><?= count($relationships['sections']['items']) ?></strong></header>
         <?php if ($relationships['sections']['items'] === []): ?>
-          <p class="tb-owner-empty"><?= __('No registered Theme Section wrappers were found in this theme.') ?></p>
+          <p class="tb-owner-empty"><?= __('No Theme Section renderers were found in this theme.') ?></p>
         <?php else: ?>
           <?php foreach ($relationships['sections']['items'] as $section): ?>
             <div class="tb-owner-item">
-              <div class="tb-owner-item-title"><a href="<?= h($section['url']) ?>"><strong><?= h(basename($section['path'], '.php')) ?></strong></a><code><?= h($section['path']) ?></code></div>
+              <div class="tb-owner-item-title"><a href="<?= h($section['url']) ?>"><strong><?= h(basename($section['path'], '.php')) ?></strong></a><code><?= __('Theme-owned renderer') ?></code></div>
               <?php if ($section['error'] !== null): ?>
                 <p class="tb-owner-note"><?= h(__((string)$section['error'])) ?></p>
               <?php elseif ($section['scan_reason'] === 'aggregate_limit'): ?>
                 <p class="tb-owner-note"><?= __('Dependency scan skipped after the 16 MiB navigation budget was reached.') ?></p>
               <?php elseif (!$section['scanned']): ?>
-                <p class="tb-owner-note"><?= __('Dependency scan skipped because this wrapper exceeds 256 KiB.') ?></p>
+                <p class="tb-owner-note"><?= __('Compatibility dependency scan skipped because this renderer exceeds 256 KiB.') ?></p>
               <?php elseif ($section['dependencies'] === []): ?>
-                <p class="tb-owner-note"><?= __('No local literal leaf dependency detected.') ?></p>
+                <p class="tb-owner-note"><?= __('Direct renderer. No bounded legacy main/sections dependency detected.') ?></p>
               <?php else: ?>
                 <div class="tb-owner-dependencies">
                   <?php foreach ($section['dependencies'] as $dependency): ?><a href="<?= h($dependency['url']) ?>"><span><?= h($dependency['path']) ?></span><small><?= h($dependency['category']) ?></small></a><?php endforeach; ?>
@@ -300,6 +300,20 @@ try {
             </div>
           <?php endforeach; ?>
         <?php endif; ?>
+      </article>
+      <article class="tb-owner-card">
+        <header><div><span><?= __('Theme-owned PHP') ?></span><h5><?= __('Collection Layouts') ?></h5></div><strong><?= count($relationships['collection_layouts']['items']) ?></strong></header>
+        <?php if ($relationships['collection_layouts']['items'] === []): ?>
+          <p class="tb-owner-empty"><?= __('No theme-owned Collection Layouts were found.') ?></p>
+        <?php else: ?>
+          <?php foreach ($relationships['collection_layouts']['items'] as $layout): ?>
+            <div class="tb-owner-item">
+              <div class="tb-owner-item-title"><strong><?= h($layout['name']) ?></strong><code><?= __('Theme') ?>: <?= h($layout['theme_folder']) ?></code></div>
+              <div class="tb-owner-actions"><a class="btn btn-sm btn-outline" href="<?= h($layout['url']) ?>"><?= $relationships['collection_layouts']['active_theme'] ? __('Open Collection Layout Editor') : __('Open Source in Core') ?></a></div>
+            </div>
+          <?php endforeach; ?>
+        <?php endif; ?>
+        <p class="tb-owner-note"><?= __('Draft Collection Layout and Theme Section authoring is not supported in Theme Builder; these owner links cover installed themes only.') ?></p>
       </article>
     </div>
   </section>

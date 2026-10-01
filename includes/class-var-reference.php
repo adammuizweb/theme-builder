@@ -6,7 +6,7 @@ class VarReference
     private const COMMON_VARS = [
         '$pdo'        => ['type' => 'PDO', 'desc' => 'Database connection'],
         '$site'       => ['type' => 'array', 'desc' => 'Site info: $site["title"], $site["url"], $site["description"]'],
-        '$context'    => ['type' => 'string', 'desc' => 'Current layout context'],
+        '$context'    => ['type' => 'array', 'desc' => 'Current request and layout rendering context'],
         '$page_title' => ['type' => 'string', 'desc' => 'Page title for <title> tag'],
     ];
 
@@ -57,7 +57,9 @@ class VarReference
         'mb_strimwidth($str, 0, 200, "…")' => 'Truncate with ellipsis',
         'apply_filters("post_content", $content, $post)' => 'Apply content filters',
         'menu_render($pdo, "primary", [...])' => 'Render dynamic menu',
-        'widget("name", [...])' => 'Render sidebar widget',
+        'widget("name", [...], $pdo)' => 'Render a widget with the current database connection',
+        'render_sidebar_widgets($pdo, $zone ?? null)' => 'Render the managed sidebar chain before local fallbacks',
+        'render_shortcode_preset($pdo, "preset-slug", $overrides, $context)' => 'Render a published Preset with bounded request-local overrides',
         'svg_ico("name")' => 'Render Lucide icon',
         'date("d M Y", strtotime($post["created_at"]))' => 'Format date',
     ];
@@ -70,6 +72,16 @@ class VarReference
             'common' => self::COMMON_VARS,
             'post_fields' => in_array($slot, ['single.post', 'single.page'], true) ? self::POST_FIELDS : [],
             'helpers' => self::HELPERS,
+            'protected' => [
+                '$__jy_theme_folder' => 'Resolved theme owner; Core-managed and not caller-overridable',
+                '$__jy_theme_source_folder' => 'Physical source owner; Core-managed and not caller-overridable',
+                '$__jy_slot_key' => 'Resolved slot identity; Core-managed and not caller-overridable',
+            ],
+            'theme_section' => [
+                '$attrs' => 'Merged registered defaults and shortcode attributes',
+                '$context' => 'Current page or post rendering context',
+                '$pdo' => 'Database connection',
+            ],
         ];
     }
 
@@ -98,6 +110,14 @@ class VarReference
         $html .= '</ul><h4>Helpers</h4><ul class="tb-var-list">';
         foreach ($ref['helpers'] as $code => $desc) {
             $html .= '<li><code>' . htmlspecialchars($code) . '</code><br><small>' . htmlspecialchars($desc) . '</small></li>';
+        }
+        $html .= '</ul><h4>Protected Slot Metadata</h4><ul class="tb-var-list">';
+        foreach ($ref['protected'] as $name => $desc) {
+            $html .= '<li><code>' . htmlspecialchars($name) . '</code><br><small>' . htmlspecialchars($desc) . '</small></li>';
+        }
+        $html .= '</ul><h4>Theme Sections</h4><ul class="tb-var-list">';
+        foreach ($ref['theme_section'] as $name => $desc) {
+            $html .= '<li><code>' . htmlspecialchars($name) . '</code><br><small>' . htmlspecialchars($desc) . '</small></li>';
         }
         $html .= '</ul></div>';
         return $html;

@@ -22,6 +22,7 @@ final class ThemeBuilderCoreIntegration
         add_action('theme_source_editor_actions', [self::$instance, 'themeSourceEditorActions'], 10);
         add_action('theme_manager_theme_actions', [self::$instance, 'themeManagerThemeActions'], 10);
         add_filter('theme_source_edit_policy', [self::$instance, 'themeSourceEditPolicy'], 10);
+        add_filter('theme_delete_preflight', [self::$instance, 'themeDeletePreflight'], 10);
     }
 
     public function themeSourceEditorActions(array $themeRow, array $context, PDO $pdo): void
@@ -87,6 +88,33 @@ final class ThemeBuilderCoreIntegration
         } catch (Throwable $error) {
             error_log('[theme-builder-source-policy] ' . $error->getMessage());
             return ['allowed' => false, 'message' => $this->text('Theme Builder could not verify managed-fork provenance. Editing is blocked.')];
+        }
+    }
+
+    public function themeDeletePreflight(array $state, array $themeRow, array $manifest, array $context, PDO $pdo): array
+    {
+        $allowed = ($state['allowed'] ?? null) === true;
+        if (!$allowed) return $state;
+
+        $folder = is_string($context['folder'] ?? null)
+            ? $context['folder']
+            : (string)($themeRow['folder_name'] ?? '');
+        if (!$this->validFolder($folder)) return ['allowed' => true, 'message' => ''];
+
+        try {
+            if (!(new ThemeForkService($pdo))->hasManagedForkMarker($folder)) {
+                return ['allowed' => true, 'message' => ''];
+            }
+            return [
+                'allowed' => false,
+                'message' => $this->boundedMessage($this->text('This theme is managed by Theme Builder. Use Theme Builder to delete the managed fork.')),
+            ];
+        } catch (Throwable $error) {
+            error_log('[theme-builder-delete-policy] ' . $error->getMessage());
+            return [
+                'allowed' => false,
+                'message' => $this->boundedMessage($this->text('Theme Builder could not verify managed-fork provenance. Use Theme Builder to review or delete the fork.')),
+            ];
         }
     }
 

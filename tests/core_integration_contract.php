@@ -83,13 +83,13 @@ register_shutdown_function(static function () use ($root, $remove): void { $remo
 
 try {
     $manifest = json_decode((string)file_get_contents(dirname(__DIR__) . '/plugin.json'), true, 32, JSON_THROW_ON_ERROR);
-    $check(($manifest['requires']['jyavani'] ?? null) === '>=2.3.164' && ($manifest['version'] ?? null) === '1.8.1',
-        'release manifest targets Core 2.3.164 as Theme Builder 1.8.1');
+    $check(($manifest['requires']['jyavani'] ?? null) === '>=2.3.164' && ($manifest['version'] ?? null) === '1.8.2',
+        'release manifest targets Core 2.3.164 as Theme Builder 1.8.2');
 
     $hooks = $GLOBALS['_tb_hooks'];
-    $check(count($hooks) === 3 && array_column($hooks, 1) === ['theme_source_editor_actions', 'theme_manager_theme_actions', 'theme_source_edit_policy']
-        && count($hooks[0]) === 4 && count($hooks[1]) === 4 && count($hooks[2]) === 4,
-        'bootstrap registers source and Theme Manager hooks through Core\'s three-argument registration API');
+    $check(count($hooks) === 4 && array_column($hooks, 1) === ['theme_source_editor_actions', 'theme_manager_theme_actions', 'theme_source_edit_policy', 'theme_delete_preflight']
+        && count($hooks[0]) === 4 && count($hooks[1]) === 4 && count($hooks[2]) === 4 && count($hooks[3]) === 4,
+        'bootstrap registers source, Theme Manager, and deletion hooks through Core\'s registration API');
     $callbacks = [];
     foreach ($hooks as $hook) $callbacks[$hook[1]] = $hook[2];
 
@@ -150,6 +150,27 @@ try {
     $invalid = $callbacks['theme_source_edit_policy']($allow, $row, ['operation' => 'save', 'folder' => 'managed-fork'], $pdo);
     $check($invalid['allowed'] === false && str_contains($invalid['message'], 'provenance'),
         'invalid managed-fork provenance fails Core save closed');
+    $metadataBefore = (string)file_get_contents($metadataPath);
+    $delete = $callbacks['theme_delete_preflight'](
+        ['allowed' => true, 'message' => ''],
+        $row,
+        ['folder' => 'managed-fork', 'name' => 'Managed Fork'],
+        ['folder' => 'managed-fork', 'operation' => 'delete'],
+        $pdo
+    );
+    $check($delete['allowed'] === false && str_contains($delete['message'], 'Theme Builder')
+        && (string)file_get_contents($metadataPath) === $metadataBefore && is_dir($themesRoot . '/managed-fork'),
+        'Core deletion is denied for malformed managed-fork provenance without preflight cleanup');
+    $priorDeleteDeny = ['allowed' => false, 'message' => ' Denied first. '];
+    $check($callbacks['theme_delete_preflight']($priorDeleteDeny, $row, [], ['folder' => 'managed-fork'], $pdo) === $priorDeleteDeny,
+        'managed-fork deletion policy is monotonic and preserves an earlier denial');
+    @unlink($metadataPath);
+    @rmdir($workspace . '/.installed-forks');
+    $unmanagedDelete = $callbacks['theme_delete_preflight'](
+        ['allowed' => true, 'message' => ''], $row, [], ['folder' => 'managed-fork'], $pdo
+    );
+    $check($unmanagedDelete === ['allowed' => true, 'message' => ''] && !file_exists($workspace . '/.installed-forks'),
+        'Core deletion remains available without creating absent provenance storage');
 
     $source = (string)file_get_contents(dirname(__DIR__) . '/includes/class-theme-builder-core-integration.php');
     foreach (['theme_update_preflight', 'theme_update_completed', 'theme_install_completed', 'plugin_state_change_preflight'] as $removedHook) {
