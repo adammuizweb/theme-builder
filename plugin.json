@@ -1,6 +1,6 @@
 {
   "name": "theme-builder",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "title": "Theme Builder",
   "description": "Site Owner theme draft, build, install, complete-fork, and owner-navigation workspace using Core's installed source editor.",
   "author": "Adam Muiz",
@@ -136,7 +136,7 @@
     ]
   },
   "assets": {
-    "css": ["/static/plugins/theme-builder/theme-builder.css?v=1.8.0"],
+    "css": ["/static/plugins/theme-builder/theme-builder.css?v=1.8.1"],
     "js": []
   }
 }

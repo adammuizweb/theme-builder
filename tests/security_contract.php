@@ -16,8 +16,8 @@ try {
 }
 
 $check(($manifest['name'] ?? null) === 'theme-builder', 'manifest identity is theme-builder');
-$check(($manifest['version'] ?? null) === '1.8.0' && ($manifest['requires']['jyavani'] ?? null) === '>=2.3.164',
-    'manifest releases Theme Builder 1.8.0 with the Core source-service floor');
+$check(($manifest['version'] ?? null) === '1.8.1' && ($manifest['requires']['jyavani'] ?? null) === '>=2.3.164',
+    'manifest releases Theme Builder 1.8.1 with the Core source-service floor');
 $check(in_array('tokenizer', $manifest['requires']['extensions'] ?? [], true),
     'manifest declares tokenizer for bounded Core-source dependency navigation');
 $check(!array_key_exists('permissions', $manifest), 'manifest declares no delegated Theme Builder permissions');
@@ -120,10 +120,19 @@ $check(str_contains($integration, 'Fork & Edit') && str_contains($integration, '
     && !str_contains($integration, 'Export PHP') && !str_contains($integration, 'Inspect PHP'),
     'Core surfaces receive only fork and owner navigation actions');
 $check(str_contains($integration, 'tm-action-group--theme-builder')
+    && str_contains($integration, 'theme-source-action-group--theme-builder')
+    && substr_count($integration, 'Theme Builder') >= 2
     && str_contains($builderCss, '.tm-action-group--theme-builder')
+    && str_contains($builderCss, '.theme-source-action-group--theme-builder')
+    && str_contains($builderCss, '.theme-source-action-group--theme-builder .theme-source-action')
+    && str_contains($builderCss, 'display:flex')
     && str_contains($builderCss, '.tb-theme-builder-action--primary')
-    && str_contains($builderCss, 'html.theme-dark .tm-action-group--theme-builder'),
-    'Theme Builder actions remain visually distinct from Core in light and dark themes');
+    && str_contains($builderCss, 'html.theme-dark .tm-action-group--theme-builder')
+    && str_contains($builderCss, 'html.theme-dark .theme-source-action-group--theme-builder')
+    && !str_contains($builderCss, '.tb-core-source-action'),
+    'Theme Builder owner groups remain visually distinct from Core on both surfaces in light and dark themes');
+$check(str_contains((string)file_get_contents($root . '/plugin.json'), 'theme-builder.css?v=1.8.1'),
+    'changed owner-action stylesheet uses a cache-distinct asset URL');
 
 $check(str_contains($inspector, 'theme_source_service($this->pdo)')
     && !str_contains($inspector, 'RecursiveDirectoryIterator') && !str_contains($inspector, 'VIEWS_BASE'),
@@ -146,7 +155,7 @@ $check(!str_contains($forkService, "privateDirectory('.baselines')")
 $check(str_contains($installed, 'Legacy Theme Builder revision data is retained')
     && str_contains($readme, 'Existing legacy') && str_contains($readme, 'left untouched'),
     'legacy baseline and revision retention is explicit');
-$check(str_contains($readme, 'Theme Builder 1.8.0') && str_contains($readme, 'Core 2.3.164'),
+$check(str_contains($readme, 'Theme Builder 1.8.1') && str_contains($readme, 'Core 2.3.164'),
     'README documents the released Core and Theme Builder compatibility pair');
 $check(version_compare('2.3.163', substr((string)$manifest['requires']['jyavani'], 2), '<')
     && str_contains($readme, 'activation remains blocked on older'),

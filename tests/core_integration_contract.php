@@ -83,8 +83,8 @@ register_shutdown_function(static function () use ($root, $remove): void { $remo
 
 try {
     $manifest = json_decode((string)file_get_contents(dirname(__DIR__) . '/plugin.json'), true, 32, JSON_THROW_ON_ERROR);
-    $check(($manifest['requires']['jyavani'] ?? null) === '>=2.3.164' && ($manifest['version'] ?? null) === '1.8.0',
-        'release manifest targets Core 2.3.164 as Theme Builder 1.8.0');
+    $check(($manifest['requires']['jyavani'] ?? null) === '>=2.3.164' && ($manifest['version'] ?? null) === '1.8.1',
+        'release manifest targets Core 2.3.164 as Theme Builder 1.8.1');
 
     $hooks = $GLOBALS['_tb_hooks'];
     $check(count($hooks) === 3 && array_column($hooks, 1) === ['theme_source_editor_actions', 'theme_manager_theme_actions', 'theme_source_edit_policy']
@@ -102,9 +102,12 @@ try {
     $actions = (string)ob_get_clean();
     $check(str_contains($actions, 'Fork &amp; Edit') && str_contains($actions, 'Owner Workspaces')
         && str_contains($actions, 'fork=managed-fork') && str_contains($actions, 'theme=managed-fork')
-        && str_contains($actions, 'tb-core-source-action')
+        && str_contains($actions, 'theme-source-action-group--theme-builder')
+        && str_contains($actions, 'theme-source-action-owner')
+        && str_contains($actions, 'tb-theme-builder-action--primary')
+        && str_contains($actions, 'Theme Builder')
         && !str_contains($actions, 'Save') && !str_contains($actions, 'Export'),
-        'Core source editor receives fork and owner links but no duplicate save or export action');
+        'Core source editor receives an owner-labelled Theme Builder group without duplicate save or export actions');
 
     ob_start();
     $callbacks['theme_manager_theme_actions'](

@@ -35,8 +35,11 @@ final class ThemeBuilderCoreIntegration
             $base = $this->adminBase($context['admin_base_path'] ?? null);
             $fork = $base . '/?page=admin/tools/theme-builder/installed&fork=' . rawurlencode($folder);
             $owners = $base . '/?page=admin/tools/theme-builder/installed&theme=' . rawurlencode($folder);
-            echo '<a class="tm-ghost tb-core-source-action" href="' . $this->escape($fork) . '">' . $this->escape($this->text('Fork & Edit')) . '</a>';
-            echo '<a class="tm-ghost tb-core-source-action" href="' . $this->escape($owners) . '">' . $this->escape($this->text('Owner Workspaces')) . '</a>';
+            echo '<div class="theme-source-action-group theme-source-action-group--theme-builder">';
+            echo '<span class="theme-source-action-owner tb-action-owner">' . $this->escape($this->text('Theme Builder')) . '</span>';
+            echo '<a class="theme-source-action tb-theme-builder-action tb-theme-builder-action--primary" href="' . $this->escape($fork) . '">' . $this->escape($this->text('Fork & Edit')) . '</a>';
+            echo '<a class="theme-source-action tb-theme-builder-action" href="' . $this->escape($owners) . '">' . $this->escape($this->text('Owner Workspaces')) . '</a>';
+            echo '</div>';
         } catch (Throwable $error) {
             error_log('[theme-builder-source-actions] ' . $error->getMessage());
         }

@@ -8,7 +8,7 @@ tracks fork provenance, and links related owner workspaces.
 Installed-theme PHP inspection, direct editing, revisions, baselines, exports,
 and Store update protection are owned by Jyavani Core.
 
-Theme Builder 1.8.0 uses the native theme source editor introduced in Jyavani
+Theme Builder 1.8.1 uses the native theme source editor introduced in Jyavani
 Core 2.3.164. Install or update Core first; activation remains blocked on older
 Core versions rather than restoring the former duplicate installed-source editor.
 
@@ -112,8 +112,8 @@ deny Core `edit`, `save`, and `restore` operations for managed forks that are
 active, assigned, or whose provenance cannot be verified. It never reverses an
 earlier denial and does not claim Store baseline ownership.
 
-Theme Builder also contributes visually branded `Fork & Edit` and
-`Owner Workspaces` links to Core Theme Manager cards through
+Theme Builder contributes one purple, owner-labelled action group containing
+`Fork & Edit` and `Owner Workspaces` to Core Theme Manager cards through
 `theme_manager_theme_actions`, and to the source editor through
 `theme_source_editor_actions`. It does not add a direct-save or export action.
 
