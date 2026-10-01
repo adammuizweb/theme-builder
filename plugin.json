@@ -1,15 +1,15 @@
 {
   "name": "theme-builder",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "title": "Theme Builder",
-  "description": "Site Owner PHP theme source workspace with guarded editing, durable revisions, explicit Core update decisions, and read-only navigation to owner workspaces.",
+  "description": "Site Owner theme draft, build, install, complete-fork, and owner-navigation workspace using Core's installed source editor.",
   "author": "Adam Muiz",
   "author_uri": "https://jyavani.com/member/adammuiz/",
   "plugin_uri": "https://jyavani.com/plugin/theme-builder/",
   "homepage": "https://jyavani.com/plugin/theme-builder/",
   "icon": "icon.png",
   "requires": {
-    "jyavani": ">=2.3.87",
+    "jyavani": ">=2.3.164",
     "php": ">=8.1",
     "extensions": ["pdo", "json", "zip", "mbstring", "tokenizer"]
   },
@@ -102,13 +102,6 @@
         "roles": ["admin"]
       },
       {
-        "route": "admin/tools/theme-builder/api/save_fork_file",
-        "file": "admin/api/save_fork_file.php",
-        "hidden": true,
-        "site_owner": true,
-        "roles": ["admin"]
-      },
-      {
         "route": "admin/tools/theme-builder/api/delete_fork",
         "file": "admin/api/delete_fork.php",
         "hidden": true,
@@ -116,29 +109,8 @@
         "roles": ["admin"]
       },
       {
-        "route": "admin/tools/theme-builder/api/save_installed_file",
-        "file": "admin/api/save_installed_file.php",
-        "hidden": true,
-        "site_owner": true,
-        "roles": ["admin"]
-      },
-      {
-        "route": "admin/tools/theme-builder/api/list_theme_revisions",
-        "file": "admin/api/list_theme_revisions.php",
-        "hidden": true,
-        "site_owner": true,
-        "roles": ["admin"]
-      },
-      {
-        "route": "admin/tools/theme-builder/api/restore_theme_revision",
-        "file": "admin/api/restore_theme_revision.php",
-        "hidden": true,
-        "site_owner": true,
-        "roles": ["admin"]
-      },
-      {
-        "route": "admin/tools/theme-builder/api/export_theme_source",
-        "file": "admin/api/export_theme_source.php",
+        "route": "admin/tools/theme-builder/api/export_legacy_history",
+        "file": "admin/api/export_legacy_history.php",
         "hidden": true,
         "site_owner": true,
         "roles": ["admin"]
@@ -164,7 +136,7 @@
     ]
   },
   "assets": {
-    "css": ["/static/plugins/theme-builder/theme-builder.css?v=1.7.1"],
+    "css": ["/static/plugins/theme-builder/theme-builder.css?v=1.8.0"],
     "js": []
   }
 }

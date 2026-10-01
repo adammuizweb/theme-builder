@@ -9,6 +9,7 @@ if (!function_exists('h')) {
 
 $pdo = $GLOBALS['pdo'] ?? null;
 if (!$pdo) { echo '<p>Database not available.</p>'; return; }
+adiwira_require_permission($pdo, 'core.themes.manage', false);
 adiwira_require_site_owner($pdo, false);
 $csrfToken = csrf_token();
 

@@ -1,16 +1,20 @@
 # Theme Builder
 
-Theme Builder is a secure PHP theme source workspace for
-[Jyavani CMS](https://jyavani.com/). It lets the Site Owner create theme drafts,
-inspect installed themes, fork themes for safer customization, edit guarded PHP
-source, retain revisions, and export source without executing editable PHP
-inside the builder.
+Theme Builder is a Site Owner authoring workspace for
+[Jyavani CMS](https://jyavani.com/). It creates private theme drafts, builds and
+installs verified packages, creates complete physical forks of installed themes,
+tracks fork provenance, and links related owner workspaces.
 
-Theme Builder is a source-code tool, not a visual or no-code page builder.
+Installed-theme PHP inspection, direct editing, revisions, baselines, exports,
+and Store update protection are owned by Jyavani Core.
+
+Theme Builder 1.8.0 uses the native theme source editor introduced in Jyavani
+Core 2.3.164. Install or update Core first; activation remains blocked on older
+Core versions rather than restoring the former duplicate installed-source editor.
 
 ## Requirements
 
-- Jyavani Core 2.3.87 or newer
+- Jyavani Core 2.3.164 or newer
 - PHP 8.1 or newer
 - PHP extensions: PDO, JSON, ZIP, mbstring, and tokenizer
 - `proc_open()` and a PHP CLI binary matching the web runtime's PHP version
@@ -19,53 +23,47 @@ Theme Builder is a source-code tool, not a visual or no-code page builder.
 Set `THEME_BUILDER_PHP_CLI` when the matching PHP CLI binary cannot be found
 automatically.
 
-## Features
+## Ownership
 
-- Create private theme drafts from a bundled starter theme.
-- Edit canonical PHP theme slots with a CodeMirror source editor.
-- Edit the bundled CSS and JavaScript assets and selected `theme.json` fields.
-- Build, verify, download, and install flat theme ZIP packages.
-- Inspect registered installed themes without executing their PHP source.
-- Review file hashes, sizes, line counts, permissions, ownership, dependencies,
-  UTF-8 state, and canonical slot resolution.
-- Fork an installed theme into a distinct inactive theme before customization.
-- Perform advanced direct PHP edits with explicit risk acknowledgements.
-- Record durable revisions before changed installed PHP is replaced.
-- Restore revisions through the same validation and atomic-write pipeline.
-- Track protected PHP baselines and detect modified, added, deleted, or
-  untracked files before Store updates.
-- Export current installed PHP, revisions, and baseline metadata for recovery.
-- Navigate to related Core Theme Templates and authorized owner workspaces.
+Theme Builder owns:
 
-## Installation
+- Private draft workspaces and the bundled starter theme.
+- Draft PHP, CSS, JavaScript, and structured `theme.json` editing.
+- Verified draft ZIP build, download, and Core-backed installation.
+- Complete physical installed-theme forks with detached Store identity.
+- Managed-fork provenance and safe deletion.
+- Navigation to Core Theme Templates, Jy Builder, and Content Translation.
 
-Install Theme Builder through Jyavani's Plugin Store or upload its plugin
-package through the Jyavani plugin manager. Activate it there so Core can check
-the requirements, register the Site Owner routes, and publish the plugin's
-static stylesheet.
+Jyavani Core owns:
 
-Open **Tools > Theme Builder** after activation. Every page and API route is
-restricted to the Jyavani Site Owner.
+- Installed PHP inventory and source inspection.
+- Existing-file PHP save and revision restore.
+- Installed source revisions and protected baselines.
+- Store update source preflight and replacement decisions.
+- Current source, revision, and baseline export.
+- Native Theme Manager and `admin/themes/source` interfaces.
+
+Theme Builder does not register fallback installed-source mutation routes. If
+Core's `theme_source_service()` contract is unavailable, installed inventory and
+fork creation fail clearly instead of restoring the former plugin editor.
 
 ## Draft Workflow
 
 1. Open **Tools > Theme Builder**.
-2. Create a draft with a lowercase slug, name, and optional theme metadata.
-3. Edit the canonical PHP slots and supported assets.
-4. Update the allowlisted `theme.json` fields when needed.
-5. Build the theme ZIP. Theme Builder lints PHP and verifies the source tree
-   against the completed archive.
-6. Download the verified ZIP or install it through Jyavani Core.
-7. Activate or assign the installed theme from Core's Themes interface.
+2. Create a draft with a lowercase slug, name, and optional metadata.
+3. Edit canonical PHP slots, supported assets, and allowlisted `theme.json`
+   fields.
+4. Build the theme ZIP. Theme Builder lints PHP and verifies source against the
+   completed archive.
+5. Download the verified ZIP or install it through Jyavani Core.
+6. Activate or assign the installed theme from Core's Themes interface.
 
 Installing a draft does not activate it automatically. Drafts remain separate
 from installed theme trees.
 
 ### Editable Draft Files
 
-The editor exposes the canonical PHP slots used by the starter theme, including
-header, footer, sidebar, homepage, search, error, list, index, and single views.
-It also supports these assets:
+The editor supports canonical starter slots and these assets:
 
 ```text
 assets/css/style.css
@@ -76,127 +74,101 @@ assets/js/script.js
 Draft source must be valid UTF-8, contain no NUL bytes, and remain within the
 workspace's bounded file and package limits.
 
-## Installed Theme Inspection
+## Installed Themes
 
-Use **Inspect Installed Themes** to browse PHP source from themes that are both
-physically present and registered in Jyavani Core. The inspector categorizes
-canonical slots, sections, shortcode partials, helpers, and other views. It also
-shows whether a canonical slot is physical, inherited from the default theme,
-or missing.
+Use **Installed Themes & Forks** to open Core's native source editor, start a
+complete fork, delete an eligible managed fork, or navigate to related owner
+workspaces. Theme Builder obtains PHP inventory and opaque file identities from
+Core's `ThemeSourceService`; it does not render another source editor.
 
-Inspection uses opaque file identifiers, strict path containment, and bounded
-source reads. Literal local `require` and `include` relationships are reported
-without executing the inspected file.
+Core's native editor is available at `admin/themes/source` with the registered
+`folder` query parameter. Core provides inspection, direct editing, revisions,
+restore, dirty-state reporting, and source export there.
 
-Theme Builder can link to related owner workspaces when their routes are
-installed and authorized, including Core Theme Templates, Jy Builder layouts,
-and Content Translation theme resources. Those records remain owned by their
-respective systems.
+Theme Section owner navigation reads bounded wrapper bytes through Core's
+`ThemeSourceService::source()` and resolves literal local dependencies against
+opaque identities from Core's inventory. Theme Builder does not scan
+`VIEWS_BASE`, execute source, or accept browser filesystem paths.
 
-## Fork and Edit
+## Fork And Edit
 
-**Fork & Edit** is the safer way to customize an installed theme:
+**Fork & Edit** creates a complete physical copy before opening Core's source
+editor:
 
 1. Select a registered installed theme.
 2. Choose a new lowercase folder, runtime name, and display title.
-3. Theme Builder copies and verifies the complete physical theme tree.
-4. The fork receives a distinct identity, is detached from Store metadata, and
-   is registered as inactive.
-5. Edit the fork while it remains inactive and unassigned.
-6. Activate or assign it through Jyavani Core after review.
+3. Theme Builder verifies and copies the complete physical tree.
+4. The fork receives a distinct identity, loses Store metadata, and is
+   registered inactive.
+5. Core edits the fork while Theme Builder's policy requires it to remain
+   inactive and unassigned.
+6. Activate or assign the fork through Jyavani Core after review.
 
-Forking copies physical theme files. It does not copy database Theme Templates,
-assignments, customizations, translations, or Theme Zone records.
+Forking does not copy database Theme Templates, assignments, customizations,
+translations, or Theme Zone records.
 
-## Direct Editing
+Theme Builder contributes a monotonic `theme_source_edit_policy` filter. It can
+deny Core `edit`, `save`, and `restore` operations for managed forks that are
+active, assigned, or whose provenance cannot be verified. It never reverses an
+earlier denial and does not claim Store baseline ownership.
 
-Advanced direct editing is available for eligible installed themes. It is not
-available for the Core default or system themes. A direct-edit candidate opens
-read-only until the Site Owner explicitly accepts the relevant risks:
+Theme Builder also contributes visually branded `Fork & Edit` and
+`Owner Workspaces` links to Core Theme Manager cards through
+`theme_manager_theme_actions`, and to the source editor through
+`theme_source_editor_actions`. It does not add a direct-save or export action.
 
-- Saved PHP can execute with the web process's privileges.
-- Changes to an active or assigned theme can affect live requests immediately.
-- A later Store update can replace local PHP changes.
+## Managed Fork Deletion
 
-Use a fork when live direct editing is unnecessary.
+Only an inactive, unassigned Theme Builder fork with matching provenance and
+physical root identity can be deleted. Deletion removes the registered fork,
+its physical tree, Theme Builder provenance, and associated Theme Zone rows.
 
-## Revisions
+Legacy data under `cfg/var/theme-builder/.baselines` and `.revisions` is retained
+and is not used as current authority. Managed-fork deletion does not remove that
+legacy history.
 
-Before replacing changed installed PHP, Theme Builder stores the exact displaced
-bytes as a private revision. Revision metadata includes source hashes, actor,
-time, file identity, operation, ownership, permissions, baseline identity, and
-the physical theme root identity.
+### Legacy History Export
 
-- An unchanged save does not create a revision.
-- Restoring a revision first records the current source as an undo revision.
-- Unsaved browser-buffer changes are not revisioned.
-- Revision history is bounded by count and storage limits.
-- Revisions are valid only for their registered theme and physical root.
+The installed-theme page offers **Export Legacy History** for retained Theme
+Builder baseline and revision records. This is a global, read-only recovery
+export and is intentionally separate from Core's current installed-source
+export.
 
-## Store Update Protection
-
-Theme Builder records protected baselines for physical PHP after Core theme
-installation and updates. It compares current PHP against that baseline before
-a Store-managed theme update.
-
-Modified or untracked PHP creates a blocking preflight issue. Continuing
-requires an explicit destructive decision to replace local PHP with the incoming
-version. The decision is bound to the current hashes and update identity; stale
-or malformed decisions fail closed. Theme Builder does not merge or reapply
-local PHP after an update.
-
-The plugin also blocks its own disable or deletion when Store-managed theme PHP
-is modified, untracked, or cannot be verified.
-
-## Export Types
-
-Theme Builder provides two different exports:
-
-### Draft Build ZIP
-
-- Contains the complete draft theme tree.
-- Places `theme.json` and theme files at the archive root.
-- Is suitable for installation through Jyavani Core.
-- Becomes stale after the draft source changes.
-
-### Installed PHP Source Export
-
-- Contains current physical PHP, valid revisions, export metadata, and the
-  protected baseline when available.
-- Excludes CSS, JavaScript, images, fonts, `theme.json`, assignments, Theme Zone
-  records, and database customizations.
-- Is a recovery/source-review archive, not a complete installable theme.
+The export requires both `core.themes.manage` and Site Owner authority, plus POST
+and CSRF. It rejects symlinks, special files, unsafe paths, oversized records,
+and changed file identities. The verified ZIP is created in private temporary
+storage, streamed with no-store headers, and removed after the request. Export
+does not parse legacy records as current authority and never writes installed
+theme source.
 
 ## Security Model
 
-- All routes are Site Owner-only and enforce access in depth.
+- All plugin routes require both `core.themes.manage` and Site Owner authority.
+  The manifest's non-delegable Site Owner guard conceals the route before its
+  included page or API handler performs the capability check.
 - Mutations are POST-only and require Core CSRF validation.
-- Reads, saves, restores, forks, and exports use strict path containment and
-  reject symlinks or special filesystem entries.
-- SHA-256 state tokens prevent stale writes.
-- Installed writes use Core lifecycle locks and atomic same-directory
-  replacement while preserving ownership and permissions.
-- Forks, packages, and exports are verified before publication or download.
-- Private metadata, revisions, baselines, and exports stay outside the public
-  and installed-theme roots.
-- Failures to verify source or storage state fail closed.
-
-Theme Builder parses PHP with `php -l`; it does not execute editable source in
-its editor, inspector, or export pipeline. Syntax validation is not a malware
-scanner, sandbox, or proof that code is safe. Installed or activated theme PHP
-is later executed normally by Jyavani Core.
+- Draft writes use stale-hash checks and PHP linting.
+- Fork creation copies a bounded, symlink-free complete tree through private
+  staging, verifies hashes, and publishes under Core lifecycle locks.
+- Fork deletion rechecks inactive and unassigned state under lifecycle and
+  database locks.
+- Installed source requests use Core's opaque identities and writer pipeline.
+- PHP lint is syntax validation, not a sandbox or malware scan.
 
 ## Private Storage
 
-The default draft workspace is under Jyavani's private `cfg/var/theme-builder`
+The default workspace is under Jyavani's private `cfg/var/theme-builder`
 directory. It can be overridden with `THEME_BUILDER_WORKSPACE`.
 
-The configured workspace must not be world-writable or located below the public
-directory or installed theme root.
+The workspace must not be world-writable or located below the public directory
+or installed-theme root. Current Theme Builder state includes drafts, build
+artifacts, managed-fork provenance, and operation locks. Existing legacy
+baseline and revision directories are deliberately left untouched. Temporary
+`.legacy-exports` archives are removed after download or failed construction.
 
 ## Development
 
-Tests are standalone PHP contract scripts. From the repository root, run:
+Run the standalone contract suite from the repository root:
 
 ```bash
 for test in tests/*_contract.php; do
@@ -204,7 +176,7 @@ for test in tests/*_contract.php; do
 done
 ```
 
-Lint all PHP sources with:
+Lint every PHP source:
 
 ```bash
 while IFS= read -r -d '' file; do
@@ -212,8 +184,5 @@ while IFS= read -r -d '' file; do
 done < <(find . -name '*.php' -print0)
 ```
 
-The contract suite uses temporary directories and PDO SQLite. Some filesystem
-checks can report `SKIP` when the host does not permit symlink creation.
-
-Bug reports and focused contributions are welcome through
-[GitHub Issues](https://github.com/adammuizweb/theme-builder/issues).
+The tests use temporary directories and PDO SQLite. Some filesystem checks can
+report `SKIP` when the host does not permit symlink creation.

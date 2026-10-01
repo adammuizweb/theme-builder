@@ -2,11 +2,30 @@
 
 declare(strict_types=1);
 
-$root = sys_get_temp_dir() . '/theme-builder-inspector-' . bin2hex(random_bytes(8));
-$themesRoot = $root . '/themes';
-mkdir($themesRoot, 0770, true);
-define('VIEWS_BASE', $themesRoot);
-define('DEFAULT_THEME_FOLDER', 'foundation');
+final class ThemeSourceService
+{
+    public array $inventories = [];
+    public array $sources = [];
+    public array $calls = [];
+
+    public function inventory(string $folder): array
+    {
+        $this->calls[] = ['inventory', $folder];
+        return $this->inventories[$folder] ?? ['files' => []];
+    }
+
+    public function source(string $folder, string $fileId): ?array
+    {
+        $this->calls[] = ['source', $folder, $fileId];
+        return $this->sources[$folder][$fileId] ?? null;
+    }
+}
+
+function theme_source_service(PDO $pdo): ThemeSourceService
+{
+    return $GLOBALS['_tb_theme_source_service'];
+}
+
 require_once dirname(__DIR__) . '/includes/class-theme-workspace.php';
 require_once dirname(__DIR__) . '/includes/class-installed-theme-inspector.php';
 
@@ -15,184 +34,94 @@ $check = static function (bool $ok, string $message) use (&$failures): void {
     echo ($ok ? 'PASS ' : 'FAIL ') . $message . PHP_EOL;
     if (!$ok) $failures[] = $message;
 };
-$remove = static function (string $path) use (&$remove): void {
-    if (is_link($path) || is_file($path)) {
-        @unlink($path);
-        return;
-    }
-    if (!is_dir($path)) return;
-    foreach (scandir($path) ?: [] as $entry) {
-        if ($entry === '.' || $entry === '..') continue;
-        $remove($path . DIRECTORY_SEPARATOR . $entry);
-    }
-    @rmdir($path);
-};
-$write = static function (string $relative, string $content) use ($themesRoot): void {
-    $path = $themesRoot . '/' . $relative;
-    if (!is_dir(dirname($path))) mkdir(dirname($path), 0770, true);
-    file_put_contents($path, $content);
-};
-register_shutdown_function(static function () use ($root, $remove): void { $remove($root); });
 
 try {
-    $coreFolder = '_' . str_repeat('A', 126) . 'Z';
-    $write('foundation/theme.json', "{\"name\":\"Default\",\"version\":\"2.3.86\"}\n");
-    $write('foundation/header.php', "<?php echo 'default header';\n");
-    $write('foundation/footer.php', "<?php echo 'default footer';\n");
-
-    $write('apu/theme.json', json_encode([
-        'name' => 'APU Fixture',
-        'version' => '3.2.2',
-        'description' => 'Nested section fixture',
-        'store' => ['url' => 'https://example.test/themes/apu', 'slug' => 'apu'],
-    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL);
-    $write('apu/header.php', "<?php echo 'apu header';\n");
-    $write('apu/helpers/cards.php', "<?php function apu_cards(): array { return []; }\n");
-    $write('apu/main/sections/hero.php', "<?php echo 'hero';\n");
-    $write('apu/main/sections/gallery.php', "<?php echo 'galeri';\n");
-    $write('apu/partials/shortcodes/section/hero.php', "<?php\n// require __DIR__ . '/../../../main/sections/gallery.php';\nREQUIRE __DIR__ . '/../../../main/sections/hero.php';\n");
-    $write('apu/partials/components/card.php', "<?php echo 'card';\n");
-    $write('apu/large.php', '<?php /* ' . str_repeat('x', 270000) . ' */');
-    $write('unregistered/header.php', "<?php echo 'hidden';\n");
-    $write('conflicting/theme.json', '{"folder":"other-theme","name":"Conflict","version":"1.0.0"}');
-    $write('conflicting/header.php', "<?php echo 'conflict';\n");
-    $write('non-string/theme.json', '{"folder":42,"name":"Non-string","version":"1.0.0"}');
-    $write('non-string/header.php', "<?php echo 'non-string';\n");
-    $write($coreFolder . '/theme.json', json_encode(['folder' => $coreFolder, 'name' => 'Core Grammar', 'version' => '1.0.0'], JSON_THROW_ON_ERROR));
-    $write($coreFolder . '/header.php', "<?php echo 'core grammar';\n");
-
     $pdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
     $pdo->exec('CREATE TABLE themes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        folder_name TEXT COLLATE NOCASE NOT NULL UNIQUE,
-        name TEXT NOT NULL,
-        description TEXT NOT NULL DEFAULT \'\',
-        version TEXT NOT NULL DEFAULT \'\',
-        author TEXT NOT NULL DEFAULT \'\',
-        manifest_json TEXT,
-        is_active INTEGER NOT NULL DEFAULT 0,
-        is_system INTEGER NOT NULL DEFAULT 0,
-        store_url TEXT NOT NULL DEFAULT \'\',
-        store_slug TEXT NOT NULL DEFAULT \'\'
+        id INTEGER PRIMARY KEY AUTOINCREMENT, folder_name TEXT COLLATE NOCASE NOT NULL UNIQUE, name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT \'\', version TEXT NOT NULL DEFAULT \'\', author TEXT NOT NULL DEFAULT \'\',
+        is_active INTEGER NOT NULL DEFAULT 0, is_system INTEGER NOT NULL DEFAULT 0,
+        store_url TEXT NOT NULL DEFAULT \'\', store_slug TEXT NOT NULL DEFAULT \'\'
     )');
-    $insert = $pdo->prepare('INSERT INTO themes (folder_name, name, version, is_active, is_system) VALUES (?, ?, ?, ?, ?)');
-    $insert->execute(['foundation', 'Database Default', '2.3.86', 0, 1]);
-    $insert->execute(['apu', 'Database APU', '3.2.1', 1, 0]);
-    $insert->execute([$coreFolder, 'Core Grammar', '1.0.0', 0, 0]);
-    $insert->execute(['conflicting', 'Conflict', '1.0.0', 0, 0]);
-    $insert->execute(['non-string', 'Non-string', '1.0.0', 0, 0]);
+    $pdo->exec("INSERT INTO themes (folder_name, name, description, version, is_active, store_url, store_slug)
+        VALUES ('apu', 'APU Theme', 'Fixture', '3.2.2', 1, 'https://store.test', 'apu')");
 
-    $unsafeDir = $themesRoot . '/unsafe';
-    mkdir($unsafeDir, 0770);
-    $symlinkSupported = @symlink('/etc/passwd', $unsafeDir . '/leak.php');
-    if ($symlinkSupported) $insert->execute(['unsafe', 'Unsafe', '1.0.0', 0, 0]);
+    $headerId = hash('sha256', 'header');
+    $sectionId = hash('sha256', 'section');
+    $leafId = hash('sha256', 'leaf');
+    $service = new ThemeSourceService();
+    $headerSource = "<?php echo 'apu';\n";
+    $sectionSource = "<?php require __DIR__ . '/../../../main/sections/hero.php';\n";
+    $leafSource = "<?php echo 'hero';\n";
+    $service->inventories['apu'] = ['theme' => [
+        'id' => 1, 'folder' => 'apu', 'active' => true, 'assigned' => true, 'store' => true, 'system' => true,
+    ], 'files' => [
+        ['id' => $sectionId, 'path' => 'partials/shortcodes/section/hero.php', 'size' => strlen($sectionSource), 'sha256' => hash('sha256', $sectionSource)],
+        ['id' => $leafId, 'path' => 'main/sections/hero.php', 'size' => strlen($leafSource), 'sha256' => hash('sha256', $leafSource)],
+        ['id' => $headerId, 'path' => 'header.php', 'size' => strlen($headerSource), 'sha256' => hash('sha256', $headerSource)],
+    ]];
+    $service->sources['apu'][$headerId] = [
+        'id' => $headerId, 'path' => 'header.php', 'source' => $headerSource, 'sha256' => hash('sha256', $headerSource),
+    ];
+    $service->sources['apu'][$sectionId] = [
+        'id' => $sectionId, 'path' => 'partials/shortcodes/section/hero.php', 'source' => $sectionSource,
+        'sha256' => hash('sha256', $sectionSource),
+    ];
+    $GLOBALS['_tb_theme_source_service'] = $service;
 
     $inspector = new InstalledThemeInspector($pdo);
     $themes = $inspector->themes();
-    $apuRows = array_values(array_filter($themes, static fn(array $theme): bool => $theme['folder'] === 'apu'));
-    $check(count($apuRows) === 1 && ($apuRows[0]['folder'] ?? null) === 'apu',
-        'a manifest with no folder uses the supplied physical folder identity');
-    $check(($apuRows[0]['name'] ?? null) === 'APU Fixture' && ($apuRows[0]['version'] ?? null) === '3.2.2', 'physical manifest metadata takes precedence over stale registry metadata');
-    $check(($apuRows[0]['active'] ?? false) === true && ($apuRows[0]['store'] ?? false) === true, 'active and Store status are reported');
-    $check(($apuRows[0]['php_files'] ?? null) === 7 && ($apuRows[0]['inspectable'] ?? false) === true, 'recursive PHP inventory count is reported');
-
-    if ($symlinkSupported) {
-        $unsafeRows = array_values(array_filter($themes, static fn(array $theme): bool => $theme['folder'] === 'unsafe'));
-        $check(count($unsafeRows) === 1 && ($unsafeRows[0]['inspectable'] ?? true) === false, 'a registered theme containing a symlink fails closed in the list');
-    } else {
-        echo "SKIP symlink behavior is unavailable\n";
-    }
-
-    $beforeHashes = [];
-    foreach (['header.php', 'helpers/cards.php', 'large.php', 'main/sections/hero.php', 'main/sections/gallery.php', 'partials/shortcodes/section/hero.php', 'partials/components/card.php'] as $path) {
-        $beforeHashes[$path] = hash_file('sha256', $themesRoot . '/apu/' . $path);
-    }
+    $check(count($themes) === 1 && ($themes[0]['php_files'] ?? null) === 3 && ($themes[0]['active'] ?? false)
+        && ($themes[0]['assigned'] ?? false) && ($themes[0]['store'] ?? false) && ($themes[0]['system'] ?? false),
+        'installed list combines registry metadata with authoritative Core inventory state');
 
     $inspection = $inspector->inspect('apu');
-    $files = $inspection['files'];
-    $byPath = [];
-    foreach ($files as $file) $byPath[$file['path']] = $file;
-    $check(count($files) === 7, 'all nested physical PHP files are inventoried');
-    $check(($byPath['header.php']['category'] ?? null) === 'slot' && ($byPath['header.php']['slot'] ?? null) === 'header', 'canonical physical source is classified as a slot');
-    $check(($byPath['partials/shortcodes/section/hero.php']['category'] ?? null) === 'section-wrapper', 'APUJ-style section wrapper is classified');
-    $check(($byPath['main/sections/hero.php']['category'] ?? null) === 'section', 'nested section leaf is classified');
-    $check(($byPath['helpers/cards.php']['category'] ?? null) === 'helper', 'helper PHP is classified');
-    $check(preg_match('/\A[a-f0-9]{64}\z/D', (string)($byPath['main/sections/hero.php']['id'] ?? '')) === 1, 'file identity is an opaque SHA-256 token');
+    $files = [];
+    foreach ($inspection['files'] as $file) $files[$file['path']] = $file;
+    $check(($files['header.php']['id'] ?? null) === $headerId && ($files['header.php']['category'] ?? null) === 'slot'
+        && ($files['header.php']['slot'] ?? null) === 'header', 'Core file records are normalized for owner navigation');
+    $check(($files['partials/shortcodes/section/hero.php']['category'] ?? null) === 'section-wrapper',
+        'Core inventory paths retain Theme Builder navigation classification');
+    $check(array_filter($service->calls, static fn(array $call): bool => $call === ['inventory', 'apu']) !== [],
+        'installed inventory is obtained from theme_source_service');
 
-    $wrapper = $inspector->source('apu', (string)$byPath['partials/shortcodes/section/hero.php']['id']);
-    $wrapperDependencies = $wrapper['dependencies'] ?? [];
-    $check(($wrapper['dependencies_scanned'] ?? false) === true && count($wrapperDependencies) === 1 && ($wrapperDependencies[0]['path'] ?? null) === 'main/sections/hero.php', 'token-aware literal __DIR__ dependency ignores comments and resolves uppercase require');
-    $dependencyMap = $inspector->literalDependencies('apu', [
-        (string)$byPath['partials/shortcodes/section/hero.php']['id'],
-        (string)$byPath['large.php']['id'],
-    ]);
-    $check(($dependencyMap[$byPath['partials/shortcodes/section/hero.php']['id']]['dependencies'][0]['path'] ?? null) === 'main/sections/hero.php'
-        && ($dependencyMap[$byPath['large.php']['id']]['scanned'] ?? true) === false,
-        'batch literal dependency inventory traverses once and skips oversized source bytes');
-    $large = $inspector->source('apu', (string)$byPath['large.php']['id']);
-    $check(($large['dependencies_scanned'] ?? true) === false && ($large['dependencies'] ?? null) === [], 'large source remains readable while dependency tokenization is skipped');
+    $source = $inspector->source('apu', $headerId);
+    $check(($source['source'] ?? null) === "<?php echo 'apu';\n"
+        && in_array(['source', 'apu', $headerId], $service->calls, true),
+        'read compatibility delegates opaque source lookup to Core without filesystem fallback');
+    $check($inspector->source('apu', "bad\0id") === null, 'invalid opaque source identity is rejected before Core dispatch');
 
-    $slots = [];
-    foreach ($inspection['slots'] as $slot) $slots[$slot['slot']] = $slot;
-    $check(($slots['header']['status'] ?? null) === 'physical' && !empty($slots['header']['file_id']), 'physical canonical slot is linked to its opaque file ID');
-    $check(($slots['footer']['status'] ?? null) === 'inherited' && empty($slots['footer']['file_id']), 'missing selected-theme slot follows configured default-theme fallback');
-    $check(($slots['sidebar']['status'] ?? null) === 'missing', 'slot absent from selected and default themes reports missing');
+    $dependencyMap = $inspector->literalDependencies('apu', [$sectionId]);
+    $check(($dependencyMap[$sectionId]['scanned'] ?? false) === true
+        && ($dependencyMap[$sectionId]['dependencies'][0]['id'] ?? null) === $leafId,
+        'literal dependency parsing maps Core source bytes back to a Core opaque inventory identity');
+    $sourceCallsBeforeLimit = count(array_filter($service->calls, static fn(array $call): bool => $call[0] === 'source'));
+    foreach ($service->inventories['apu']['files'] as &$record) {
+        if ($record['id'] === $sectionId) $record['size'] = 262145;
+    }
+    unset($record);
+    $limited = $inspector->literalDependencies('apu', [$sectionId]);
+    $sourceCallsAfterLimit = count(array_filter($service->calls, static fn(array $call): bool => $call[0] === 'source'));
+    $check(($limited[$sectionId]['reason'] ?? null) === 'file_limit' && $sourceCallsAfterLimit === $sourceCallsBeforeLimit,
+        'oversized dependency source is rejected from token processing before Core source bytes are requested');
 
-    $hero = $inspector->source('apu', (string)$byPath['main/sections/hero.php']['id']);
-    $check(($hero['path'] ?? null) === 'main/sections/hero.php' && ($hero['source'] ?? null) === "<?php echo 'hero';\n", 'opaque ID opens the expected regular-file bytes');
-    $check(($hero['sha256'] ?? null) === hash('sha256', "<?php echo 'hero';\n") && ($hero['utf8'] ?? false) === true, 'source metadata contains a verified hash and encoding status');
-    $check(preg_match('/\A[a-f0-9]{64}\z/D', (string)($hero['target_token'] ?? '')) === 1, 'source metadata binds browser state to the physical theme root and file identity');
-    $check($inspector->source('apu', str_repeat('0', 64)) === null, 'unknown opaque file ID reveals no source');
-    $check($inspector->source('apu', '../../etc/passwd') === null, 'path-shaped file selector is rejected');
     $wrongCaseRejected = false;
     try { $inspector->inspect('APU'); } catch (RuntimeException) { $wrongCaseRejected = true; }
-    $check($wrongCaseRejected, 'case-insensitive database matches are rejected unless folder case is exact');
-    foreach (['conflicting', 'non-string'] as $invalidManifestFolder) {
-        $manifestIdentityRejected = false;
-        try { $inspector->inspect($invalidManifestFolder); } catch (RuntimeException) { $manifestIdentityRejected = true; }
-        $check($manifestIdentityRejected, 'manifest rejects invalid supplied folder identity: ' . $invalidManifestFolder);
-    }
-    $coreInspection = $inspector->inspect($coreFolder);
-    $check(($coreInspection['theme']['folder'] ?? '') === $coreFolder && count($coreInspection['files']) === 1,
-        'installed inspector accepts Core 128-byte folders beginning with underscore');
+    $check($wrongCaseRejected, 'registered theme identity remains exact-case even with NOCASE collation');
 
-    $unregisteredRejected = false;
-    try {
-        $inspector->inspect('unregistered');
-    } catch (RuntimeException) {
-        $unregisteredRejected = true;
-    }
-    $check($unregisteredRejected, 'physical but unregistered theme cannot be inspected');
+    $service->inventories['apu'] = ['theme' => [
+        'id' => 1, 'folder' => 'apu', 'active' => true, 'assigned' => false, 'store' => true, 'system' => false,
+    ], 'files' => [[
+        'id' => $headerId, 'path' => '../header.php', 'size' => 1, 'sha256' => hash('sha256', 'x'),
+    ]]];
+    $invalidCoreInventoryRejected = false;
+    try { $inspector->inspect('apu'); } catch (RuntimeException) { $invalidCoreInventoryRejected = true; }
+    $check($invalidCoreInventoryRejected, 'malformed Core inventory fails closed rather than invoking a plugin filesystem scanner');
 
-    $invalidFolderRejected = false;
-    try {
-        $inspector->inspect('../apu');
-    } catch (InvalidArgumentException) {
-        $invalidFolderRejected = true;
-    }
-    $check($invalidFolderRejected, 'theme-folder traversal is rejected before filesystem resolution');
-    foreach (['.', '..', str_repeat('a', 129)] as $invalidCoreFolder) {
-        $rejected = false;
-        try { $inspector->inspect($invalidCoreFolder); } catch (InvalidArgumentException) { $rejected = true; }
-        $check($rejected, 'installed inspector rejects non-Core folder identity: ' . strlen($invalidCoreFolder));
-    }
-
-    $budgetIds = [];
-    for ($index = 0; $index < 65; $index++) {
-        $path = 'apu/partials/shortcodes/section/budget-' . $index . '.php';
-        $write($path, "<?php\n/*" . str_repeat('x', 262000) . "*/\n");
-    }
-    $budgetInspection = $inspector->inspect('apu');
-    foreach ($budgetInspection['files'] as $file) {
-        if (str_starts_with((string)$file['path'], 'partials/shortcodes/section/budget-')) $budgetIds[] = $file['id'];
-    }
-    $budgetDependencies = $inspector->literalDependencies('apu', $budgetIds);
-    $budgetSkipped = array_filter($budgetDependencies, static fn(array $state): bool => ($state['reason'] ?? null) === 'aggregate_limit');
-    $check($budgetSkipped !== [], 'batch literal dependency inventory enforces its 16 MiB aggregate tokenization budget');
-
-    foreach ($beforeHashes as $path => $hash) {
-        $check(hash_file('sha256', $themesRoot . '/apu/' . $path) === $hash, 'inspection does not mutate ' . $path);
-    }
+    $sourceCode = (string)file_get_contents(dirname(__DIR__) . '/includes/class-installed-theme-inspector.php');
+    $check(str_contains($sourceCode, 'theme_source_service($this->pdo)')
+        && !str_contains($sourceCode, 'RecursiveDirectoryIterator') && !str_contains($sourceCode, 'VIEWS_BASE'),
+        'installed adapter contains no duplicate physical source inventory implementation');
 } catch (Throwable $error) {
     $failures[] = 'unexpected exception: ' . $error->getMessage();
     echo 'FAIL unexpected exception: ' . $error->getMessage() . PHP_EOL;
@@ -202,5 +131,4 @@ if ($failures !== []) {
     fwrite(STDERR, 'Installed theme inspector contract failed: ' . implode('; ', $failures) . PHP_EOL);
     exit(1);
 }
-
 echo "RESULT: ALL PASS\n";

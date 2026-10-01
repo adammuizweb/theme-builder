@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+adiwira_require_permission($pdo, 'core.themes.manage', false);
 adiwira_require_site_owner($pdo, false);
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
     header('Allow: GET');

@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+adiwira_require_permission($pdo, 'core.themes.manage', false);
 adiwira_require_site_owner($pdo, false);
 header('Content-Type: text/plain; charset=utf-8');
 header('Cache-Control: no-store');

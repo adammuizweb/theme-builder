@@ -9,6 +9,7 @@ require_once $__tb_dir . '/includes/class-installed-theme-inspector.php';
 require_once $__tb_dir . '/includes/class-theme-owner-navigator.php';
 require_once $__tb_dir . '/includes/class-theme-fork-service.php';
 require_once $__tb_dir . '/includes/class-theme-builder-core-integration.php';
+require_once $__tb_dir . '/includes/class-theme-builder-legacy-history.php';
 require_once $__tb_dir . '/includes/class-var-reference.php';
 
 if (class_exists('PDO', false) && ($GLOBALS['pdo'] ?? null) instanceof PDO

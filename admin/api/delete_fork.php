@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+adiwira_require_permission($pdo, 'core.themes.manage', true);
 adiwira_require_site_owner($pdo, true);
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') adiwira_json(['error' => __('Method not allowed')], 405);
 $csrf = $_POST['csrf_token'] ?? '';

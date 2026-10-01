@@ -9,6 +9,7 @@ if (!function_exists('h')) {
 
 $pdo = $GLOBALS['pdo'] ?? null;
 if (!$pdo) { echo '<p>Database not available.</p>'; return; }
+adiwira_require_permission($pdo, 'core.themes.manage', false);
 adiwira_require_site_owner($pdo, false);
 $csrfToken = csrf_token();
 
@@ -29,7 +30,7 @@ $themes = ThemeWorkspace::listThemes();
       <h2><?= __('Theme Builder') ?></h2>
       <p class="muted"><?= __('Create custom themes with guarded PHP, CSS, and JavaScript editing, then build a validated installable ZIP.') ?></p>
     </div>
-    <a href="<?= h($installedUrl) ?>" class="btn btn-outline"><?= __('Inspect Installed Themes') ?></a>
+    <a href="<?= h($installedUrl) ?>" class="btn btn-outline"><?= __('Installed Themes & Forks') ?></a>
   </div>
 
   <?php if ($flash): ?>

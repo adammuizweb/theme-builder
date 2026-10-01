@@ -92,6 +92,41 @@ function ct_theme_file_translation_statuses(PDO $pdo, array $resources): array
     return ['active:main.homepage' => ['id' => 'published', 'de' => 'draft']];
 }
 
+final class ThemeSourceService
+{
+    public function inventory(string $folder): array
+    {
+        $wrapper = "<?php\nrequire __DIR__ . '/../../../main/sections/hero.php';\n";
+        $leaf = "<?php echo 'hero';\n";
+        $homepage = "<?php echo 'homepage';\n";
+        return ['theme' => [
+            'id' => 1, 'folder' => $folder, 'active' => true, 'assigned' => true, 'store' => false, 'system' => true,
+        ], 'files' => [
+            ['id' => hash('sha256', 'wrapper'), 'path' => 'partials/shortcodes/section/hero.php', 'size' => strlen($wrapper), 'sha256' => hash('sha256', $wrapper)],
+            ['id' => hash('sha256', 'leaf'), 'path' => 'main/sections/hero.php', 'size' => strlen($leaf), 'sha256' => hash('sha256', $leaf)],
+            ['id' => hash('sha256', 'homepage'), 'path' => 'main/homepage.php', 'size' => strlen($homepage), 'sha256' => hash('sha256', $homepage)],
+        ]];
+    }
+
+    public function source(string $folder, string $fileId): ?array
+    {
+        if ($fileId !== hash('sha256', 'wrapper')) return null;
+        $source = "<?php\nrequire __DIR__ . '/../../../main/sections/hero.php';\n";
+        return [
+            'id' => $fileId,
+            'path' => 'partials/shortcodes/section/hero.php',
+            'source' => $source,
+            'sha256' => hash('sha256', $source),
+        ];
+    }
+}
+
+function theme_source_service(PDO $pdo): ThemeSourceService
+{
+    static $service;
+    return $service ??= new ThemeSourceService();
+}
+
 require_once dirname(__DIR__) . '/includes/class-theme-workspace.php';
 require_once dirname(__DIR__) . '/includes/class-installed-theme-inspector.php';
 require_once dirname(__DIR__) . '/includes/class-theme-owner-navigator.php';
@@ -223,10 +258,12 @@ try {
     $check(count($sections) === 1
         && ($sections[0]['path'] ?? null) === 'partials/shortcodes/section/hero.php'
         && ($sections[0]['dependencies'][0]['path'] ?? null) === 'main/sections/hero.php',
-        'registered Theme Section wrappers map to literal local PHP leaf dependencies');
-    $check(str_contains((string)$sections[0]['url'], 'file=')
-        && str_contains((string)$sections[0]['dependencies'][0]['url'], 'file='),
-        'Theme Section navigation uses opaque inspector file identities rather than client paths');
+        'Theme Section wrapper maps its literal local leaf through Core source bytes and inventory identity');
+    $check(str_contains((string)$sections[0]['url'], 'page=admin/themes/source')
+        && str_contains((string)$sections[0]['url'], 'folder=active') && str_contains((string)$sections[0]['url'], 'file=')
+        && str_contains((string)$sections[0]['dependencies'][0]['url'], 'page=admin/themes/source')
+        && str_contains((string)$sections[0]['dependencies'][0]['url'], 'folder=active'),
+        'wrapper and leaf navigation use Core native source URLs and opaque identities');
 
     $inactiveInspection = $inspection;
     $inactiveInspection['theme']['active'] = false;

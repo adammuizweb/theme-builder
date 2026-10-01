@@ -34,6 +34,27 @@ function package_publication_recovery_paths(string $target): array
     return $GLOBALS['_theme_publication_recovery_paths'][$target] ?? [];
 }
 
+final class ThemeSourceService
+{
+    public array $inventoryCalls = [];
+
+    public function inventory(string $folder): array
+    {
+        $this->inventoryCalls[] = $folder;
+        return ['theme' => [
+            'id' => 1, 'folder' => $folder, 'active' => false, 'assigned' => false, 'store' => true, 'system' => false,
+        ], 'files' => []];
+    }
+
+    public function source(string $folder, string $fileId): ?array { return null; }
+}
+
+function theme_source_service(PDO $pdo): ThemeSourceService
+{
+    static $service;
+    return $service ??= new ThemeSourceService();
+}
+
 final class ForkContractPdo extends PDO
 {
     public bool $failNextCommit = false;
@@ -69,7 +90,6 @@ function register_theme_in_db($pdoOrNull, string $folderName, array $manifest = 
 }
 
 require_once dirname(__DIR__) . '/includes/class-theme-workspace.php';
-require_once dirname(__DIR__) . '/includes/class-installed-theme-inspector.php';
 require_once dirname(__DIR__) . '/includes/class-theme-fork-service.php';
 
 $failures = [];
@@ -204,6 +224,8 @@ JSON;
     $state = $service->forkState('source-fork');
     $check(($state['managed'] ?? false) === true && ($state['editable'] ?? false) === true, 'inactive Theme Builder fork is eligible for editing');
     $check(($service->forkState('source')['editable'] ?? true) === false, 'original Store theme remains read-only');
+    $check(in_array('source', theme_source_service($pdo)->inventoryCalls, true),
+        'fork creation verifies the registered source through Core ThemeSourceService inventory');
 
     $pdo->prepare('INSERT INTO assignments (slot_key, theme_id, theme_file) VALUES (?, ?, ?)')->execute(['footer', (int)$targetRow['id'], 'footer.php']);
     $check(($service->forkState('source-fork')['editable'] ?? true) === false, 'inactive fork assigned to a live slot is read-only');
@@ -219,46 +241,8 @@ JSON;
     rename($originalForkRoot, $forkRoot);
     $check(($service->forkState('source-fork')['editable'] ?? false) === true, 'original managed fork root remains bound to its metadata');
 
-    $inspector = new InstalledThemeInspector($pdo);
-    $inspection = $inspector->inspect('source-fork');
-    $files = [];
-    foreach ($inspection['files'] as $file) $files[$file['path']] = $file;
-    $leafId = (string)$files['main/sections/hero.php']['id'];
-    $leafBefore = $inspector->source('source-fork', $leafId);
-    $changed = "<?php\necho 'edited fork';\n";
-    $save = $service->savePhp('source-fork', $leafId, $changed, (string)$leafBefore['sha256'], 7, 'Contract edit');
-    $check(($save['success'] ?? false) === true && hash_file('sha256', $forkRoot . '/main/sections/hero.php') === hash('sha256', $changed), 'nested managed-fork PHP is linted and atomically saved');
-    $revision = $workspace . '/.revisions/' . $targetRow['id'] . '/' . $leafId . '/' . $save['revision_id'];
-    $check(is_file($revision . '/source.php') && (string)file_get_contents($revision . '/source.php') === "<?php\necho 'hero';\n", 'durable private revision contains exact pre-change bytes');
-    $revisionMeta = json_decode((string)file_get_contents($revision . '/revision.json'), true, 32, JSON_THROW_ON_ERROR);
-    $check(($revisionMeta['relative_path'] ?? null) === 'main/sections/hero.php' && ($revisionMeta['actor_user_id'] ?? null) === 7
-        && ($revisionMeta['change_note'] ?? null) === 'Contract edit', 'revision metadata records source identity and actor');
-    unset($revisionMeta['root_identity'], $revisionMeta['operation'], $revisionMeta['restored_from_revision_id']);
-    file_put_contents($revision . '/revision.json', json_encode($revisionMeta, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL);
-    $legacyRevisions = $service->revisions('source-fork', $leafId);
-    $check(count($legacyRevisions) === 1 && ($legacyRevisions[0]['operation'] ?? '') === 'save',
-        'concrete legacy managed-fork revision without root or operation remains valid as save');
-
-    $headerId = (string)$files['header.php']['id'];
-    $headerBefore = $inspector->source('source-fork', $headerId);
-    $headerChanged = "<?php\necho 'commit-safe';\n";
-    $pdo->failNextCommit = true;
-    $commitFailureSave = $service->savePhp('source-fork', $headerId, $headerChanged, (string)$headerBefore['sha256'], 7, 'Commit failure fixture');
-    $commitRevision = $workspace . '/.revisions/' . $targetRow['id'] . '/' . $headerId . '/' . ($commitFailureSave['revision_id'] ?? 'missing');
-    $check(($commitFailureSave['success'] ?? false) === true && isset($commitFailureSave['warning'])
-        && (string)file_get_contents($forkRoot . '/header.php') === $headerChanged && is_file($commitRevision . '/source.php'),
-        'ambiguous database commit after replacement reports verified success and preserves its revision');
-
-    $stale = $service->savePhp('source-fork', $leafId, "<?php echo 'stale';\n", (string)$leafBefore['sha256'], 7);
-    $check(($stale['success'] ?? true) === false && (string)file_get_contents($forkRoot . '/main/sections/hero.php') === $changed, 'stale fork save is rejected without changing source');
-    $current = $inspector->source('source-fork', $leafId);
-    $invalid = $service->savePhp('source-fork', $leafId, '<?php if (', (string)$current['sha256'], 7);
-    $check(($invalid['success'] ?? true) === false && (string)file_get_contents($forkRoot . '/main/sections/hero.php') === $changed, 'invalid PHP never replaces managed fork source');
-
     $pdo->prepare('UPDATE themes SET is_active = 1 WHERE folder_name = ?')->execute(['source-fork']);
     $check(($service->forkState('source-fork')['editable'] ?? true) === false, 'managed fork becomes read-only while active');
-    $activeSave = $service->savePhp('source-fork', $leafId, "<?php echo 'active';\n", hash('sha256', $changed), 7);
-    $check(($activeSave['success'] ?? true) === false && (string)file_get_contents($forkRoot . '/main/sections/hero.php') === $changed, 'active managed fork cannot be edited in Phase 2');
     $pdo->prepare('UPDATE themes SET is_active = 0 WHERE folder_name = ?')->execute(['source-fork']);
 
     $duplicate = $service->fork('source', 'source-fork', 'Duplicate', 'Duplicate', 7);
@@ -303,13 +287,16 @@ JSON;
     $check(($assignedDelete['success'] ?? true) === false && is_dir($forkRoot), 'assigned managed fork deletion is rejected without filesystem mutation');
     $pdo->prepare('DELETE FROM assignments WHERE theme_id = ?')->execute([(int)$targetRow['id']]);
     $pdo->prepare('INSERT INTO theme_zone_items (theme_folder, zone_slug) VALUES (?, ?)')->execute(['source-fork', 'footer']);
+    $legacyRevision = $workspace . '/.revisions/' . $targetRow['id'] . '/legacy';
+    mkdir($legacyRevision, 0770, true);
+    file_put_contents($legacyRevision . '/history.json', '{}');
     $deleted = $service->deleteFork('source-fork');
     $check(($deleted['success'] ?? false) === true && !file_exists($forkRoot)
         && !file_exists($metadataPath)
-        && !is_dir($workspace . '/.revisions/' . $targetRow['id'])
+        && is_file($legacyRevision . '/history.json')
         && (int)$pdo->query("SELECT COUNT(*) FROM themes WHERE folder_name = 'source-fork'")->fetchColumn() === 0
         && (int)$pdo->query("SELECT COUNT(*) FROM theme_zone_items WHERE theme_folder = 'source-fork'")->fetchColumn() === 0,
-        'inactive unassigned managed fork deletion removes its registry, tree, metadata, revisions, and Theme Zone data');
+        'fork deletion removes owned live state while retaining legacy revision data');
     $events = $GLOBALS['_theme_core_lock_events'] ?? [];
     $check(($events[0] ?? null) === ['acquire', ['0-theme-lifecycle', 'SOURCE', 'wrong-case-fork']]
         && in_array(['acquire', ['0-theme-lifecycle', 'residual-fork', 'source']], $events, true)

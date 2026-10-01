@@ -221,7 +221,6 @@ final class ThemeOwnerNavigator
                 'scan_reason' => null,
                 'error' => null,
             ];
-
             try {
                 $dependencyState = $dependencyMap[$fileId] ?? null;
                 if (!is_array($dependencyState)) throw new RuntimeException('Theme Section wrapper source is unavailable.');
@@ -391,7 +390,7 @@ final class ThemeOwnerNavigator
 
     private function sourceUrl(string $base, string $folder, string $fileId): string
     {
-        return $base . '/?page=admin/tools/theme-builder/installed&theme=' . rawurlencode($folder)
+        return $base . '/?page=admin/themes/source&folder=' . rawurlencode($folder)
             . '&file=' . rawurlencode($fileId);
     }
 

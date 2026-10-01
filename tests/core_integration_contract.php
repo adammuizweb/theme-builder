@@ -5,36 +5,41 @@ declare(strict_types=1);
 $root = sys_get_temp_dir() . '/theme-builder-core-integration-' . bin2hex(random_bytes(8));
 $themesRoot = $root . '/themes';
 $workspace = $root . '/workspace';
-mkdir($themesRoot . '/store-theme', 0770, true);
+mkdir($themesRoot . '/managed-fork', 0770, true);
+mkdir($workspace . '/.installed-forks', 0770, true);
+chmod($workspace, 0770);
+chmod($workspace . '/.installed-forks', 0770);
 define('VIEWS_BASE', $themesRoot);
 define('DEFAULT_THEME_FOLDER', 'default');
 define('THEME_BUILDER_WORKSPACE', $workspace);
 define('ADMIN_BASE_PATH', '/owner');
 
 $GLOBALS['_tb_hooks'] = [];
-$GLOBALS['_tb_core_locks'] = [];
-function add_action(string $name, callable $callback, int $priority = 10, int $acceptedArgs = 1): void
+function add_action(string $name, callable $callback, int $priority = 10): void
 {
-    $GLOBALS['_tb_hooks'][] = ['action', $name, $callback, $priority, $acceptedArgs];
+    $GLOBALS['_tb_hooks'][] = ['action', $name, $callback, $priority];
 }
-function add_filter(string $name, callable $callback, int $priority = 10, int $acceptedArgs = 1): void
+function add_filter(string $name, callable $callback, int $priority = 10): void
 {
-    $GLOBALS['_tb_hooks'][] = ['filter', $name, $callback, $priority, $acceptedArgs];
+    $GLOBALS['_tb_hooks'][] = ['filter', $name, $callback, $priority];
 }
-function theme_operation_acquire(array $folders): array
-{
-    $folders = array_values(array_unique($folders));
-    sort($folders, SORT_STRING);
-    $GLOBALS['_tb_core_locks'][] = ['acquire', $folders];
-    return $folders;
-}
-function theme_operation_release(array $locks): void
-{
-    $GLOBALS['_tb_core_locks'][] = ['release', $locks];
-}
-function csrf_token(): string { return str_repeat('c', 64); }
-function current_user_id(): int { return 17; }
 function __(string $text): string { return $text; }
+
+final class ThemeSourceService
+{
+    public function inventory(string $folder): array
+    {
+        return ['theme' => [
+            'id' => 1, 'folder' => $folder, 'active' => false, 'assigned' => false, 'store' => false, 'system' => false,
+        ], 'files' => []];
+    }
+    public function source(string $folder, string $fileId): ?array { return null; }
+}
+function theme_source_service(PDO $pdo): ThemeSourceService
+{
+    static $service;
+    return $service ??= new ThemeSourceService();
+}
 
 $pdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 $pdo->exec('CREATE TABLE themes (
@@ -44,14 +49,21 @@ $pdo->exec('CREATE TABLE themes (
     store_url TEXT NOT NULL DEFAULT \'\', store_slug TEXT NOT NULL DEFAULT \'\'
 )');
 $pdo->exec('CREATE TABLE assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, slot_key TEXT, theme_id INTEGER, theme_file TEXT, custom_post_id INTEGER)');
-$pdo->exec("INSERT INTO themes (folder_name, name, version, store_url, store_slug) VALUES ('store-theme', 'Store Theme', '1.0.0', 'https://store.test', 'store-theme')");
+$pdo->exec("INSERT INTO themes (folder_name, name, version) VALUES ('managed-fork', 'Managed Fork', '1.0.0')");
+$themeId = (int)$pdo->lastInsertId();
+file_put_contents($themesRoot . '/managed-fork/theme.json', json_encode([
+    'folder' => 'managed-fork', 'name' => 'Managed Fork', 'version' => '1.0.0',
+], JSON_THROW_ON_ERROR));
+$identity = lstat($themesRoot . '/managed-fork');
+$metadataPath = $workspace . '/.installed-forks/' . hash('sha256', 'managed-fork') . '.json';
+file_put_contents($metadataPath, json_encode([
+    'schema' => 1,
+    'folder' => 'managed-fork',
+    'theme_id' => $themeId,
+    'root_identity' => ['dev' => (int)$identity['dev'], 'ino' => (int)$identity['ino']],
+], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+chmod($metadataPath, 0660);
 $GLOBALS['pdo'] = $pdo;
-file_put_contents($themesRoot . '/store-theme/theme.json', json_encode([
-    'folder' => 'store-theme', 'name' => 'Store Theme', 'version' => '1.0.0',
-    'store' => ['url' => 'https://store.test', 'slug' => 'store-theme'],
-], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
-$original = "<?php\necho 'original';\n";
-file_put_contents($themesRoot . '/store-theme/header.php', $original);
 
 require_once dirname(__DIR__) . '/plugin.php';
 ThemeBuilderCoreIntegration::register($pdo);
@@ -70,204 +82,81 @@ $remove = static function (string $path) use (&$remove): void {
 register_shutdown_function(static function () use ($root, $remove): void { $remove($root); });
 
 try {
-    $pluginManifest = json_decode((string)file_get_contents(dirname(__DIR__) . '/plugin.json'), true, 32, JSON_THROW_ON_ERROR);
-    $check(($pluginManifest['requires']['jyavani'] ?? null) === '>=2.3.87',
-        'Theme Builder declares the Core 2.3.87 generic lifecycle and update contract floor');
+    $manifest = json_decode((string)file_get_contents(dirname(__DIR__) . '/plugin.json'), true, 32, JSON_THROW_ON_ERROR);
+    $check(($manifest['requires']['jyavani'] ?? null) === '>=2.3.164' && ($manifest['version'] ?? null) === '1.8.0',
+        'release manifest targets Core 2.3.164 as Theme Builder 1.8.0');
+
     $hooks = $GLOBALS['_tb_hooks'];
-    $check(count($hooks) === 5 && array_column($hooks, 1) === [
-        'theme_manager_theme_actions', 'theme_update_preflight', 'theme_update_completed', 'theme_install_completed',
-        'plugin_state_change_preflight',
-    ] && ($hooks[4][4] ?? null) === 3, 'plugin bootstrap idempotently registers exactly the five generic Core callbacks');
+    $check(count($hooks) === 3 && array_column($hooks, 1) === ['theme_source_editor_actions', 'theme_manager_theme_actions', 'theme_source_edit_policy']
+        && count($hooks[0]) === 4 && count($hooks[1]) === 4 && count($hooks[2]) === 4,
+        'bootstrap registers source and Theme Manager hooks through Core\'s three-argument registration API');
     $callbacks = [];
     foreach ($hooks as $hook) $callbacks[$hook[1]] = $hook[2];
-    $seed = ['schema' => 1, 'issues' => [], 'decisions' => []];
-    $update = ['current_version' => '1.0.0', 'new_version' => '2.0.0', 'checksum' => str_repeat('a', 64)];
-    $manifest = ['folder' => 'store-theme', 'version' => '1.0.0'];
 
-    $lifecycleSeed = ['allowed' => true, 'message' => ''];
-    $lifecycleUntracked = $callbacks['plugin_state_change_preflight']($lifecycleSeed, 'theme-builder', 'disable');
-    $check(array_keys($lifecycleUntracked) === ['allowed', 'message'] && $lifecycleUntracked['allowed'] === false
-        && str_contains($lifecycleUntracked['message'], 'untracked'), 'plugin disable is denied while any registered Store PHP source is untracked');
-    $check($callbacks['plugin_state_change_preflight']($lifecycleSeed, 'another-plugin', 'disable') === $lifecycleSeed,
-        'plugin lifecycle filter leaves unrelated plugins unchanged');
-
-    $untracked = $callbacks['theme_update_preflight']($seed, 'store-theme', $update, $manifest, $pdo);
-    $issue = $untracked['issues'][0] ?? [];
-    $check(($issue['id'] ?? '') === 'theme-builder.php-source' && ($issue['resolved'] ?? true) === false
-        && ($issue['details']['php_files'] ?? 0) === 1 && ($issue['choices'][0]['destructive'] ?? false) === true
-        && str_contains((string)$issue['message'], 'physical PHP'), 'untracked PHP creates one explicit destructive replacement issue');
-    $check(($issue['links'][0]['method'] ?? '') === 'POST' && ($issue['links'][1]['method'] ?? '') === 'GET'
-        && str_starts_with((string)$issue['links'][0]['url'], '/owner/') && str_contains((string)$issue['links'][1]['url'], 'fork=store-theme'),
-        'preflight exposes same-origin POST export and GET Fork & Edit links');
-    $token = (string)$issue['state_token'];
-    $wrong = $seed;
-    $wrong['decisions'] = ['theme-builder.php-source' => ['choice' => 'replace', 'state_token' => str_repeat('0', 64)]];
-    $check(($callbacks['theme_update_preflight']($wrong, 'store-theme', $update, $manifest, $pdo)['issues'][0]['resolved'] ?? true) === false,
-        'mismatched decision token never resolves untracked PHP');
-    $exact = $seed;
-    $exact['decisions'] = ['theme-builder.php-source' => ['choice' => 'replace', 'state_token' => $token]];
-    $check(($callbacks['theme_update_preflight']($exact, 'store-theme', $update, $manifest, $pdo)['issues'][0]['resolved'] ?? false) === true,
-        'only exact replace choice and current state token resolve the issue');
-
-    $callbacks['theme_install_completed']('store-theme', $manifest);
-    $service = new ThemeForkService($pdo);
-    $clean = $service->dirtyState('store-theme');
-    $check(($clean['tracked'] ?? false) && !($clean['locally_modified'] ?? true)
-        && $callbacks['theme_update_preflight']($seed, 'store-theme', $update, $manifest, $pdo)['issues'] === [],
-        'install completion captures a verified clean PHP baseline');
-
-    $baselinePath = '';
-    foreach (glob($workspace . '/.baselines/*.json') ?: [] as $candidate) {
-        $candidateBaseline = json_decode((string)file_get_contents($candidate), true);
-        if (($candidateBaseline['theme']['folder'] ?? '') === 'store-theme') { $baselinePath = $candidate; break; }
-    }
-    $validBaselineJson = (string)file_get_contents($baselinePath);
-    $validBaseline = json_decode($validBaselineJson, true, 64, JSON_THROW_ON_ERROR);
-    $baselineMutations = [
-        'exact top-level keys' => static function (array &$value): void { $value['unexpected'] = true; },
-        '32-hex baseline identity' => static function (array &$value): void { $value['baseline_id'] = str_repeat('g', 32); },
-        'exact theme keys' => static function (array &$value): void { $value['theme']['unexpected'] = true; },
-        'registered identity type' => static function (array &$value): void { $value['theme']['registered_id'] = '1'; },
-        'root identity bounds' => static function (array &$value): void { $value['theme']['root_identity']['dev'] = '-1'; },
-        'installed metadata types and bounds' => static function (array &$value): void { $value['installed']['store_url'] = str_repeat('x', 2049); },
-        'physical PHP scope' => static function (array &$value): void { $value['scope'] = 'all_files'; },
-        'capture origin' => static function (array &$value): void { $value['origin'] = 'manual'; },
-        'capture timestamp' => static function (array &$value): void { $value['captured_at'] = '2999-01-01T00:00:00+00:00'; },
-        'capture actor' => static function (array &$value): void { $value['captured_by'] = -1; },
-        'safe PHP paths' => static function (array &$value): void {
-            $record = $value['files']['header.php'];
-            unset($value['files']['header.php']);
-            $record['file_id'] = hash('sha256', "store-theme\0../header.php");
-            $value['files']['../header.php'] = $record;
-        },
-        'exact file keys' => static function (array &$value): void { $value['files']['header.php']['unexpected'] = true; },
-        'derived file identity' => static function (array &$value): void { $value['files']['header.php']['file_id'] = str_repeat('0', 64); },
-        '64-hex file hash' => static function (array &$value): void { $value['files']['header.php']['sha256'] = str_repeat('g', 64); },
-        'nonnegative bounded file size' => static function (array &$value): void { $value['files']['header.php']['size'] = -1; },
-        'case-colliding path semantics' => static function (array &$value): void {
-            $record = $value['files']['header.php'];
-            $record['file_id'] = hash('sha256', "store-theme\0HEADER.php");
-            $value['files']['HEADER.php'] = $record;
-        },
-        'file-count bound' => static function (array &$value): void {
-            $value['files'] = [];
-            for ($index = 0; $index <= 1000; $index++) {
-                $path = 'file-' . $index . '.php';
-                $value['files'][$path] = [
-                    'file_id' => hash('sha256', "store-theme\0" . $path),
-                    'sha256' => str_repeat('a', 64),
-                    'size' => 0,
-                ];
-            }
-        },
-        'cumulative byte bound' => static function (array &$value): void {
-            $value['files'] = [];
-            for ($index = 0; $index < 13; $index++) {
-                $path = 'large-' . $index . '.php';
-                $value['files'][$path] = [
-                    'file_id' => hash('sha256', "store-theme\0" . $path),
-                    'sha256' => str_repeat('a', 64),
-                    'size' => 5242880,
-                ];
-            }
-        },
-    ];
-    $invalidBaselineReads = 0;
-    foreach ($baselineMutations as $mutation) {
-        $candidate = $validBaseline;
-        $mutation($candidate);
-        file_put_contents($baselinePath, json_encode($candidate, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL);
-        if (isset($service->dirtyState('store-theme')['error'])) $invalidBaselineReads++;
-    }
-    $duplicateKeys = preg_replace('/"schema": 1/', '"schema": 1, "schema": 1', $validBaselineJson, 1);
-    file_put_contents($baselinePath, (string)$duplicateKeys);
-    if (isset($service->dirtyState('store-theme')['error'])) $invalidBaselineReads++;
-    file_put_contents($baselinePath, $validBaselineJson);
-    $check($invalidBaselineReads === count($baselineMutations) + 1,
-        'every baseline read fails closed for malformed fields, bounds, duplicate keys, and colliding semantics');
-    mkdir($themesRoot . '/store-second', 0770);
-    file_put_contents($themesRoot . '/store-second/theme.json', json_encode([
-        'folder' => 'store-second', 'name' => 'Store Second', 'version' => '1.0.0',
-        'store' => ['url' => 'https://store.test', 'slug' => 'store-second'],
-    ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
-    file_put_contents($themesRoot . '/store-second/header.php', "<?php echo 'second';\n");
-    $pdo->exec("INSERT INTO themes (folder_name, name, version, store_url, store_slug) VALUES ('store-second', 'Store Second', '1.0.0', 'https://store.test', 'store-second')");
-    $check(($callbacks['plugin_state_change_preflight']($lifecycleSeed, 'theme-builder', 'disable')['allowed'] ?? true) === false,
-        'plugin lifecycle checks every registered Store-managed theme');
-    $service->refreshBaseline('store-second', 'core_install', 17);
-    $check($callbacks['plugin_state_change_preflight']($lifecycleSeed, 'theme-builder', 'disable') === $lifecycleSeed,
-        'plugin disable is allowed only when every registered Store PHP source is tracked clean');
-
-    $changed = "<?php\necho 'changed';\n";
-    file_put_contents($themesRoot . '/store-theme/header.php', $changed);
-    $dirty = $callbacks['theme_update_preflight']($seed, 'store-theme', $update, $manifest, $pdo);
-    $dirtyIssue = $dirty['issues'][0] ?? [];
-    $check(($dirtyIssue['details']['modified_php'] ?? 0) === 1 && str_contains((string)$dirtyIssue['label'], 'PHP'),
-        'tracked dirty PHP reports PHP-only modified counts');
-    $check(($callbacks['plugin_state_change_preflight']($lifecycleSeed, 'theme-builder', 'delete')['allowed'] ?? true) === false,
-        'plugin deletion is denied while Store PHP source is locally modified');
-    $staleDecision = $seed;
-    $staleDecision['decisions'] = ['theme-builder.php-source' => ['choice' => 'replace', 'state_token' => (string)$dirtyIssue['state_token']]];
-    file_put_contents($themesRoot . '/store-theme/header.php', "<?php\necho 'changed again';\n");
-    $check(($callbacks['theme_update_preflight']($staleDecision, 'store-theme', $update, $manifest, $pdo)['issues'][0]['resolved'] ?? true) === false,
-        'PHP byte changes invalidate a previously issued decision token');
-
-    $baselinePath = '';
-    foreach (glob($workspace . '/.baselines/*.json') ?: [] as $candidate) {
-        $candidateBaseline = json_decode((string)file_get_contents($candidate), true);
-        if (($candidateBaseline['theme']['folder'] ?? '') === 'store-theme') { $baselinePath = $candidate; break; }
-    }
-    file_put_contents($baselinePath, '{broken');
-    $errorState = $callbacks['theme_update_preflight']($seed, 'store-theme', $update, $manifest, $pdo);
-    $errorIssue = $errorState['issues'][0] ?? [];
-    $check(($errorIssue['resolved'] ?? true) === false && ($errorIssue['choices'] ?? null) === []
-        && str_contains((string)$errorIssue['message'], 'could not safely verify'), 'baseline errors hard-block with no destructive choice');
-    $check(($callbacks['plugin_state_change_preflight']($lifecycleSeed, 'theme-builder', 'disable')['allowed'] ?? true) === false,
-        'plugin disable fails closed when Store PHP state cannot be verified');
-
-    $pdo->exec("UPDATE themes SET version = '2.0.0' WHERE folder_name = 'store-theme'");
-    $callbacks['theme_update_completed']('store-theme', '1.0.0', '2.0.0', ['folder' => 'store-theme', 'version' => '2.0.0']);
-    $refreshed = json_decode((string)file_get_contents($baselinePath), true, 64, JSON_THROW_ON_ERROR);
-    $check(($refreshed['origin'] ?? '') === 'core_update' && ($refreshed['captured_by'] ?? null) === 17
-        && ($refreshed['installed']['version'] ?? '') === '2.0.0'
-        && preg_match('/\A[a-f0-9]{32}\z/D', (string)($refreshed['baseline_id'] ?? '')) === 1,
-        'update completion atomically replaces a malformed baseline with current identity and a new ID');
-
-    $inspector = new InstalledThemeInspector($pdo);
-    $file = $inspector->inspect('store-theme')['files'][0];
-    $source = $inspector->source('store-theme', (string)$file['id']);
-    $saved = $service->saveDirectPhp('store-theme', (string)$file['id'], (string)$source['target_token'],
-        "<?php\necho 'revision before refresh';\n", (string)$source['sha256'], 17, '', ['direct' => true, 'store' => true]);
-    $revisionPath = $workspace . '/.revisions/1/' . $file['id'] . '/' . ($saved['revision_id'] ?? '') . '/source.php';
-    $beforeRefreshId = (string)$refreshed['baseline_id'];
-    $pdo->exec("UPDATE themes SET version = '2.1.0' WHERE folder_name = 'store-theme'");
-    $callbacks['theme_update_completed']('store-theme', '2.0.0', '2.1.0', ['folder' => 'store-theme', 'version' => '2.1.0']);
-    $afterRefresh = json_decode((string)file_get_contents($baselinePath), true, 64, JSON_THROW_ON_ERROR);
-    $check(($saved['success'] ?? false) && is_file($revisionPath)
-        && !hash_equals($beforeRefreshId, (string)$afterRefresh['baseline_id'])
-        && ($service->dirtyState('store-theme')['locally_modified'] ?? true) === false,
-        'baseline refresh creates a new current-version ID while preserving every revision');
-    $coreLockEvents = $GLOBALS['_tb_core_locks'];
-    $check(($coreLockEvents[0] ?? null) === ['acquire', ['0-theme-lifecycle', 'store-theme']],
-        'Theme Builder source mutations pair the Core lifecycle lock first with the exact affected folder');
-    $lifecycleClean = $callbacks['plugin_state_change_preflight']($lifecycleSeed, 'theme-builder', 'delete');
-    $check($lifecycleClean === $lifecycleSeed && is_file($revisionPath) && is_file($baselinePath),
-        'clean plugin deletion preflight allows Core while retaining protected baselines and revisions');
-
-    $invalidOriginRejected = false;
-    try { $service->refreshBaseline('store-theme', 'manual', 17); } catch (InvalidArgumentException) { $invalidOriginRejected = true; }
-    $check($invalidOriginRejected, 'baseline refresh accepts only core_install and core_update origins');
+    ob_start();
+    $callbacks['theme_source_editor_actions'](
+        ['folder_name' => 'managed-fork'],
+        ['folder' => 'managed-fork', 'admin_base_path' => '/owner'],
+        $pdo
+    );
+    $actions = (string)ob_get_clean();
+    $check(str_contains($actions, 'Fork &amp; Edit') && str_contains($actions, 'Owner Workspaces')
+        && str_contains($actions, 'fork=managed-fork') && str_contains($actions, 'theme=managed-fork')
+        && str_contains($actions, 'tb-core-source-action')
+        && !str_contains($actions, 'Save') && !str_contains($actions, 'Export'),
+        'Core source editor receives fork and owner links but no duplicate save or export action');
 
     ob_start();
     $callbacks['theme_manager_theme_actions'](
-        ['folder_name' => 'store-theme'],
-        $manifest,
-        ['folder' => 'store-theme', 'admin_base_path' => '/owner']
+        ['folder_name' => 'managed-fork'],
+        ['folder' => 'managed-fork', 'name' => 'Managed Fork'],
+        ['folder' => 'managed-fork', 'admin_base_path' => '/owner']
     );
-    $actions = (string)ob_get_clean();
-    $check(str_contains($actions, 'Inspect PHP') && str_contains($actions, 'Edit PHP') && str_contains($actions, 'Fork &amp; Edit')
-        && str_contains($actions, 'csrf_token') && str_contains($actions, 'Export PHP Source') && str_contains($actions, 'PHP Source Clean'),
-        'Theme Manager callback emits escaped inspect/edit/fork, CSRF export, and PHP status controls');
+    $managerActions = (string)ob_get_clean();
+    $check(str_contains($managerActions, 'tm-action-group--theme-builder')
+        && str_contains($managerActions, 'tb-theme-builder-action--primary')
+        && str_contains($managerActions, 'Theme Builder')
+        && str_contains($managerActions, 'fork=managed-fork') && str_contains($managerActions, 'theme=managed-fork'),
+        'Theme Manager cards receive a visibly branded Theme Builder action group');
+
+    $allow = ['allowed' => true, 'message' => ''];
+    $row = ['id' => $themeId, 'folder_name' => 'managed-fork'];
+    foreach (['edit', 'save', 'restore'] as $operation) {
+        $result = $callbacks['theme_source_edit_policy']($allow, $row, ['operation' => $operation, 'folder' => 'managed-fork'], $pdo);
+        $check($result === $allow, "inactive unassigned managed fork allows Core {$operation}");
+    }
+
+    $pdo->exec("UPDATE themes SET is_active = 1 WHERE folder_name = 'managed-fork'");
+    foreach (['edit', 'save', 'restore'] as $operation) {
+        $result = $callbacks['theme_source_edit_policy']($allow, $row, ['operation' => $operation, 'folder' => 'managed-fork'], $pdo);
+        $check($result['allowed'] === false && str_contains($result['message'], 'active'),
+            "active managed fork denies Core {$operation}");
+    }
+    $priorDeny = ['allowed' => false, 'message' => 'Denied by another plugin.'];
+    $check($callbacks['theme_source_edit_policy']($priorDeny, $row, ['operation' => 'save', 'folder' => 'managed-fork'], $pdo) === $priorDeny,
+        'managed-fork policy is monotonic and never reverses an earlier denial');
+
+    $pdo->exec("UPDATE themes SET is_active = 0 WHERE folder_name = 'managed-fork'");
+    $pdo->prepare('INSERT INTO assignments (slot_key, theme_id) VALUES (?, ?)')->execute(['header', $themeId]);
+    $assigned = $callbacks['theme_source_edit_policy']($allow, $row, ['operation' => 'restore', 'folder' => 'managed-fork'], $pdo);
+    $check($assigned['allowed'] === false && str_contains($assigned['message'], 'assigned'),
+        'assigned managed fork denies Core restore');
+    $pdo->exec('DELETE FROM assignments');
+
+    file_put_contents($metadataPath, '{broken');
+    $invalid = $callbacks['theme_source_edit_policy']($allow, $row, ['operation' => 'save', 'folder' => 'managed-fork'], $pdo);
+    $check($invalid['allowed'] === false && str_contains($invalid['message'], 'provenance'),
+        'invalid managed-fork provenance fails Core save closed');
+
+    $source = (string)file_get_contents(dirname(__DIR__) . '/includes/class-theme-builder-core-integration.php');
+    foreach (['theme_update_preflight', 'theme_update_completed', 'theme_install_completed', 'plugin_state_change_preflight'] as $removedHook) {
+        $check(!str_contains($source, $removedHook), "integration no longer owns {$removedHook}");
+    }
+    $serviceMethods = array_map(static fn(ReflectionMethod $method): string => $method->getName(),
+        (new ReflectionClass(ThemeForkService::class))->getMethods(ReflectionMethod::IS_PUBLIC));
+    foreach (['savePhp', 'saveDirectPhp', 'revisions', 'restoreDirectPhp', 'restoreManagedPhp', 'dirtyState', 'refreshBaseline', 'buildPhpSourceExport'] as $removedMethod) {
+        $check(!in_array($removedMethod, $serviceMethods, true), "fork service has no {$removedMethod} source ownership");
+    }
 } catch (Throwable $error) {
     $failures[] = 'unexpected exception: ' . $error->getMessage();
     echo 'FAIL unexpected exception: ' . $error->getMessage() . PHP_EOL;
